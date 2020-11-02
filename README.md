@@ -1,2 +1,2 @@
-# Wegs-DRL-Baselines
+# wegs-drl-baselines
 minimum viable implementations
