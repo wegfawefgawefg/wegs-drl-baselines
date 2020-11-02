@@ -1,0 +1,5 @@
+learnable gamma?
+
+use the atoms ad meanvalue-std points for sampling a multimodal 
+gaussian distribution
+
