@@ -1,12 +1,34 @@
-from model import Network
-from np_replay_buffer import PrioritizedReplayBuffer
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-
 from cpprb import PrioritizedReplayBuffer
+
+class Network(torch.nn.Module):
+    def __init__(self, learn_rate, inputShape, numActions):
+        super().__init__()
+        self.inputShape = inputShape
+        self.numActions = numActions
+        self.fc1Dims = 1024
+        self.fc2Dims = 512
+
+        # print("input shape {}".format(self.inputShape))
+        self.fc1 = nn.Linear(*self.inputShape, self.fc1Dims)
+        self.fc2 = nn.Linear(self.fc1Dims, self.fc2Dims)
+        self.fc3 = nn.Linear(self.fc2Dims, numActions)
+
+        self.optimizer = optim.Adam(self.parameters(), lr=alpha)
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        # self.device = torch.device("cpu")
+        self.to(self.device)
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+
+        return x
 
 class Lerper:
     def __init__(self, start, end, num_steps):
@@ -97,3 +119,38 @@ class Agent:
 
         self.epsilon.step()
         self.importance_exp.step()
+
+if __name__ == '__main__':
+    env = gym.make('CartPole-v1').unwrapped
+    agent = Agent(learn_rate=0.001, state_shape=(4,), num_actions=2, batch_size=64)
+
+    high_score = -math.inf
+    episode = 0
+    num_samples = 0
+    while True:
+        done = False
+        state = env.reset()
+
+        score, frame = 0, 1
+        while not done:
+            if frame == 5000:
+                break
+            env.render()
+
+            action = agent.choose_action(state)
+            state_, reward, done, info = env.step(action)
+            agent.store_memory(state, action, reward, state_, done)
+            agent.learn()
+
+            state = state_
+
+            score += reward
+            frame += 1
+            num_samples += 1
+
+        high_score = max(high_score, score)
+
+        print(( "num-samples: {}, ep {}: high-score {:12.3f}, "
+                "score {:12.3f}, epsilon {:6.3f}").format(
+            num_samples, episode, high_score, score, agent.epsilon.value()))
+        episode += 1

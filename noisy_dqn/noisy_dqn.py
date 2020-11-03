@@ -1,9 +1,11 @@
 import math
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from cpprb import ReplayBuffer
 
 class NoisyLinear(torch.nn.Module):
     def __init__(self, in_features, out_features, std_init=0.5):
@@ -106,3 +108,115 @@ class Network(torch.nn.Module):
     def reset_noise(self):
         self.fc2.reset_noise()
         self.fc3.reset_noise()
+
+class Lerper:
+    def __init__(self, start, end, num_steps):
+        self.delta = (end - start) / float(num_steps)
+        self.num = start - self.delta
+        self.count = 0
+        self.num_steps = num_steps
+
+    def value(self):
+        return self.num
+
+    def step(self):
+        if self.count <= self.num_steps:
+            self.num += self.delta
+        self.count += 1
+        return self.num
+
+class Agent:
+    def __init__(self, learn_rate, state_shape, num_actions, batch_size):
+        self.mem_size=100000
+        self.gamma = 0.99
+        self.action_space = list(range(num_actions))
+        self.batch_size = batch_size
+
+        self.epsilon = Lerper(start=1.0, end=0.01, num_steps=2000)
+
+        self.memory = ReplayBuffer(
+            self.mem_size, 
+            {   "obs":      { "shape": state_shape  },
+                "act":      { "shape": 1            },
+                "rew":      {                       },
+                "next_obs": { "shape": state_shape  },
+                "done":     { "shape": 1            }})
+
+        self.net = Network(learn_rate, state_shape, num_actions)
+
+    def choose_action(self, observation):
+        state = torch.tensor(observation).float().detach()
+        state = state.to(self.net.device)
+        state = state.unsqueeze(0)
+
+        q_values = self.net(state)
+        action = torch.argmax(q_values).item()
+        return action
+
+    def store_memory(self, state, action, reward, next_state, done):
+        self.memory.add(obs=state, act=action, rew=reward, next_obs=next_state, done=done)  
+
+    def learn(self):
+        if self.memory.get_stored_size() < self.batch_size:
+            return
+    
+        batch = self.memory.sample(self.batch_size)
+            
+        states  = torch.tensor( batch["obs"]                     ).to(self.net.device)
+        actions = torch.tensor( batch["act"],   dtype=torch.int64).to(self.net.device).T[0]
+        rewards = torch.tensor( batch["rew"]                     ).to(self.net.device).T[0]
+        states_ = torch.tensor( batch["next_obs"]                ).to(self.net.device)
+        dones   = torch.tensor( batch["done"],  dtype=torch.bool ).to(self.net.device).T[0]
+
+        batch_index = np.arange(self.batch_size, dtype=np.int64)
+
+        q_values  =   self.net(states)[batch_index, actions]
+        q_values_ =   self.net(states_)
+
+        action_qs_ = torch.max(q_values_, dim=1)[0]
+        action_qs_[dones] = 0.0
+        q_target = rewards + self.gamma * action_qs_
+
+        td = q_target - q_values
+
+        self.net.optimizer.zero_grad()
+        loss = (td ** 2.0).mean()
+        loss.backward()
+        self.net.optimizer.step()
+
+        self.net.reset_noise()
+
+if __name__ == '__main__':
+    env = gym.make('CartPole-v1').unwrapped
+    agent = Agent(learn_rate=0.001, state_shape=(4,), num_actions=2, batch_size=64)
+
+    high_score = -math.inf
+    episode = 0
+    num_samples = 0
+    while True:
+        done = False
+        state = env.reset()
+
+        score, frame = 0, 1
+        while not done:
+            if frame == 5000:
+                break
+            env.render()
+
+            action = agent.choose_action(state)
+            state_, reward, done, info = env.step(action)
+            agent.store_memory(state, action, reward, state_, done)
+            agent.learn()
+
+            state = state_
+
+            score += reward
+            frame += 1
+            num_samples += 1
+
+        high_score = max(high_score, score)
+
+        print(( "num-samples: {}, ep {}: high-score {:12.3f}, "
+                "score {:12.3f}, epsilon {:6.3f}").format(
+            num_samples, episode, high_score, score, agent.epsilon.value()))
+        episode += 1
