@@ -9,7 +9,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 '''
-        --  Dueling Deep Q Actor Critic --
+        --  Dueling Actor Critic --
         
         Vanilla actor critic, except add dueling dqn to the value estimation.
         -   or  -
@@ -32,7 +32,15 @@ import torch.nn.functional as F
             and only using the deviation of the chosen actions probability from the mean
 
         Performance:
+        -policy stability is low.
+        -values may be more accurate with less sample. would have to investigate
 
+        Flaws:
+        -really needs a target network for both the value network and the q_advantage network
+            "Dueling Double Actor Critic"
+
+        Benefit:
+        -apply rainbow to continuous space
 '''
 
 class Network(torch.nn.Module):
@@ -78,7 +86,7 @@ class Network(torch.nn.Module):
         return value, qs
 
 class Agent():
-    def __init__(self, learn_rate, input_shape, num_actions, batch_size):
+    def __init__(self, learn_rate, input_shape, num_actions):
         self.net = Network(learn_rate, input_shape, num_actions)
         self.num_actions = num_actions
         self.gamma = 0.99
@@ -136,8 +144,7 @@ class Agent():
         target = reward + self.gamma * future
         td = target - past
 
-
-        actor_loss = -self.action_log_prob * td 
+        actor_loss = -self.action_log_prob * td / 2.0   #   / 2.0 is primitive td clipping
         critic_and_q_loss = td**2
 
         loss = actor_loss + critic_and_q_loss
@@ -146,7 +153,7 @@ class Agent():
 
 if __name__ == '__main__':
     env = gym.make('CartPole-v1').unwrapped
-    agent = Agent(learn_rate=0.0001, input_shape=(4,), num_actions=2, batch_size=64)
+    agent = Agent(learn_rate=0.001, input_shape=(4,), num_actions=2)
 
     high_score = -math.inf
     episode = 0
