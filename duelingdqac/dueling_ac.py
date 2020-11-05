@@ -43,6 +43,20 @@ import torch.nn.functional as F
         Benefit:
         -apply rainbow to actor critic, and as such continuous space
         -extend rainbow to all the actor critic side addons
+
+        Output Sample:
+        >>>
+            total samples: 37494, ep 381: high-score     3904.000, score      179.000
+            total samples: 37822, ep 382: high-score     3904.000, score      328.000
+            total samples: 38023, ep 383: high-score     3904.000, score      201.000
+            total samples: 38201, ep 384: high-score     3904.000, score      178.000
+            total samples: 38392, ep 385: high-score     3904.000, score      191.000
+            total samples: 38587, ep 386: high-score     3904.000, score      195.000
+            total samples: 38849, ep 387: high-score     3904.000, score      262.000
+            total samples: 38986, ep 388: high-score     3904.000, score      137.000
+            total samples: 39129, ep 389: high-score     3904.000, score      143.000
+            total samples: 39322, ep 390: high-score     3904.000, score      193.000
+            total samples: 39509, ep 391: high-score     3904.000, score      187.000
 '''
 
 class Network(torch.nn.Module):
