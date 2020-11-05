@@ -45,12 +45,12 @@ class ReplayBuffer:
 class Network(torch.nn.Module):
     def __init__(self, learn_rate, input_shape, num_actions):
         super().__init__()
-        self.fc1Dims = 1024
-        self.fc2Dims = 512
+        self.fc1_dims = 1024
+        self.fc2_dims = 512
 
-        self.fc1 = nn.Linear(*input_shape,  self.fc1Dims)
-        self.fc2 = nn.Linear( self.fc1Dims, self.fc2Dims)
-        self.fc3 = nn.Linear( self.fc2Dims, num_actions  )
+        self.fc1 = nn.Linear(*input_shape,  self.fc1_dims)
+        self.fc2 = nn.Linear( self.fc1_dims, self.fc2_dims)
+        self.fc3 = nn.Linear( self.fc2_dims, num_actions  )
 
         self.optimizer = optim.Adam(self.parameters(), lr=learn_rate)
         self.loss = nn.MSELoss()
@@ -89,6 +89,7 @@ class Agent():
         self.epsilon = LinearSchedule(start=1.0, end=0.01, num_steps=2000)
         self.batch_size = batch_size
         self.num_actions = num_actions
+        self.gamma = 0.99
 
     def choose_action(self, observation):
         if random.random() > self.epsilon.value():
@@ -129,7 +130,7 @@ class Agent():
         action_qs_ = torch.max(all_qs_, dim=1)[0]   #   (batch_size, 1)
         action_qs_[dones] = 0.0
 
-        q_targets = rewards + action_qs_
+        q_targets = rewards + self.gamma * action_qs_
 
         loss = self.net.loss(q_targets, action_qs).to(self.net.device)
         loss.backward()

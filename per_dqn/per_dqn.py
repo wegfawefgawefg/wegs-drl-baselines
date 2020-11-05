@@ -10,13 +10,13 @@ class Network(torch.nn.Module):
         super().__init__()
         self.inputShape = inputShape
         self.numActions = numActions
-        self.fc1Dims = 1024
-        self.fc2Dims = 512
+        self.fc1_dims = 1024
+        self.fc2_dims = 512
 
         # print("input shape {}".format(self.inputShape))
-        self.fc1 = nn.Linear(*self.inputShape, self.fc1Dims)
-        self.fc2 = nn.Linear(self.fc1Dims, self.fc2Dims)
-        self.fc3 = nn.Linear(self.fc2Dims, numActions)
+        self.fc1 = nn.Linear(*self.inputShape,  self.fc1_dims )
+        self.fc2 = nn.Linear( self.fc1_dims,    self.fc2_dims )
+        self.fc3 = nn.Linear( self.fc2_dims,    numActions    )
 
         self.optimizer = optim.Adam(self.parameters(), lr=alpha)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
