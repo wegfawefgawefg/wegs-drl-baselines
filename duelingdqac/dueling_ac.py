@@ -33,6 +33,7 @@ import torch.nn.functional as F
 
         Performance:
         -policy stability is low.
+        -qualitatively: it gets attached to actions like actor critic, and forgets old known good strategies
         -values may be more accurate with less sample. would have to investigate
 
         Flaws:
@@ -40,7 +41,8 @@ import torch.nn.functional as F
             "Dueling Double Actor Critic"
 
         Benefit:
-        -apply rainbow to continuous space
+        -apply rainbow to actor critic, and as such continuous space
+        -extend rainbow to all the actor critic side addons
 '''
 
 class Network(torch.nn.Module):
