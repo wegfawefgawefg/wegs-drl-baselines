@@ -8,6 +8,46 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
+'''
+        --  Batch Actor Critic --
+        Actor critic, except add a replay buffer.
+
+        Usually people say this doesn't work very well. Thats because the policy is online. 
+        However, if you recompute the log probabilities from the latest policy, 
+        it works great. Also mean pool the actor gradient from the batch.
+
+        Goal:
+        -Increase sample-collected-efficiency of actor critic.
+        -Disprove assumptions.
+        -Make actor critic suck less.
+
+        Performance:
+        Works about as well as vanilla DQN.
+
+        Flaws:
+        -suffers from catastrophic forgetting.
+            probably can be fixed entirely with target network, and/or param-lerping
+
+        Benefit:
+        -continous action space
+        -primed for standard addons
+
+        Output Sample:
+        >>>
+            total samples: 8691, ep 63: high-score      923.000, score      296.000
+            total samples: 8967, ep 64: high-score      923.000, score      276.000
+            total samples: 9542, ep 65: high-score      923.000, score      575.000
+            total samples: 10349, ep 66: high-score      923.000, score      807.000
+            total samples: 10910, ep 67: high-score      923.000, score      561.000
+            total samples: 11266, ep 68: high-score      923.000, score      356.000
+            total samples: 11613, ep 69: high-score      923.000, score      347.000
+            total samples: 12054, ep 70: high-score      923.000, score      441.000
+            total samples: 12437, ep 71: high-score      923.000, score      383.000
+            total samples: 12724, ep 72: high-score      923.000, score      287.000
+            total samples: 12989, ep 73: high-score      923.000, score      265.000
+            total samples: 13247, ep 74: high-score      923.000, score      258.000
+'''
+
 class ReplayBuffer:
     def __init__(self, size, state_shape):
         self.size = size
