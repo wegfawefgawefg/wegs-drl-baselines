@@ -124,10 +124,6 @@ class Agent():
         
         batch_indices = np.arange(self.batch_size, dtype=np.int64)
 
-        things = self.net(states)
-        print(things)
-        print(things.shape)
-
         action_qs = self.net(states)[batch_indices, actions]    #   (batch_size, 1)
 
         all_qs_ =   self.net(states_)               #   (batch_size, num_actions)
@@ -144,7 +140,7 @@ class Agent():
 
 if __name__ == '__main__':
     env = gym.make('CartPole-v1').unwrapped
-    agent = Agent(learn_rate=0.001, input_shape=(4,), num_actions=2, batch_size=8)
+    agent = Agent(learn_rate=0.001, input_shape=(4,), num_actions=2, batch_size=64)
 
     high_score = -math.inf
     episode = 0
