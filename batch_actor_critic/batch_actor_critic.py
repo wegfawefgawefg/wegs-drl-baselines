@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 '''
         --  Batch Actor Critic --
-        Actor critic, except add a replay buffer.
+        Actor Critic, except add a replay buffer.
 
         Usually people say this doesn't work very well. Thats because the policy is online. 
         However, if you recompute the log probabilities from the latest policy, 
@@ -26,7 +26,7 @@ import torch.nn.functional as F
 
         Flaws:
         -suffers from catastrophic forgetting.
-            probably can be fixed entirely with target network, and/or param-lerping
+            probably can be fixed entirely with target network, and/or target-param-lerping
 
         Benefit:
         -continous action space

@@ -12,35 +12,43 @@ import torch.nn.functional as F
         --  Batch Double Actor Critic --
         Batch Actor Critic has problems with catastrophic forgetting. 
         I am unsure as to weather this is instability of the policy gradient, 
-        or the value estimations. Double should fix instability in the value estimations.
-
+        or the value estimations. Double should fix instability in the value estimations, 
+        but does not address the policy gradient noise.
 
         Goal:
-        fix instability in the value estimations.
+        -fix instability in the value estimations.
 
         Performance:
-        TBD
+        -stable as a rock, 
+            that is also positioned on something stable, 
+                such as another rock.
 
         Flaws:
-        TBD
+        -slow start.
+            1. either the value net is warming up due to the delayed updates 
+                    or
+            2. the policy gradient is still too noisy
 
         Benefit:
-        TBD
+        Nice it works. Batch Actor Critic is great with a target value network, 
+            even if the method of updating is sudden/primitive. 
+
+        Potential:
+        -needs a target policy to stabilize policy gradient
+        -maaybe soft updates
 
         Output Sample:
         >>>
-            total samples: 8691, ep 63: high-score      923.000, score      296.000
-            total samples: 8967, ep 64: high-score      923.000, score      276.000
-            total samples: 9542, ep 65: high-score      923.000, score      575.000
-            total samples: 10349, ep 66: high-score      923.000, score      807.000
-            total samples: 10910, ep 67: high-score      923.000, score      561.000
-            total samples: 11266, ep 68: high-score      923.000, score      356.000
-            total samples: 11613, ep 69: high-score      923.000, score      347.000
-            total samples: 12054, ep 70: high-score      923.000, score      441.000
-            total samples: 12437, ep 71: high-score      923.000, score      383.000
-            total samples: 12724, ep 72: high-score      923.000, score      287.000
-            total samples: 12989, ep 73: high-score      923.000, score      265.000
-            total samples: 13247, ep 74: high-score      923.000, score      258.000
+            total samples: 19245, ep 152: high-score      840.000, score      213.000
+            total samples: 19467, ep 153: high-score      840.000, score      222.000
+            total samples: 19729, ep 154: high-score      840.000, score      262.000
+            total samples: 20221, ep 155: high-score      840.000, score      492.000
+            total samples: 20748, ep 156: high-score      840.000, score      527.000
+            total samples: 21378, ep 157: high-score      840.000, score      630.000
+            total samples: 22176, ep 158: high-score      840.000, score      798.000
+            total samples: 22569, ep 159: high-score      840.000, score      393.000
+            total samples: 23155, ep 160: high-score      840.000, score      586.000
+            total samples: 24259, ep 162: high-score      840.000, score      485.000
 '''
 
 class ReplayBuffer:
@@ -129,17 +137,13 @@ class Agent():
         self.learn_step_counter = 0
         self.net_copy_interval = 10
 
-    def choose_action(self, observation, target=False):
+    def choose_action(self, observation):
         state = torch.tensor(observation).float().detach()
         state = state.to(self.net.device)
         state = state.unsqueeze(0)
         
-        if not target:
-            self.net.eval()
-            policy = self.net.get_policy(state)
-        else:
-            self.target_net.eval()
-            policy = self.target_net.get_policy(state)
+        self.net.eval()
+        policy = self.net.get_policy(state)
 
         policy = policy[0]
         policy = F.softmax(policy, dim=0)

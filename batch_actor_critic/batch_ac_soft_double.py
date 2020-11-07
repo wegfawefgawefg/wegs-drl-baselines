@@ -9,37 +9,35 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 '''
-        --  Batch Actor Critic w/ Target Lerp --
-        Actor critic, with a replay buffer, but
-        also add a target network and soft weight updating.
+        --  Batch Soft Double Actor Critic --
+        Batch Double Actor Critic suffers from a slow start, 
+        I am unsure as to weather this is instability of the policy gradient, 
+        or the delayed updates to the value network.  
 
         Goal:
-        -Fix the policy gradient instability that is probably 
-            responsible for the catastrophic fogetting.
+        -fix the slow start with soft updates
+            without reducing stability
 
         Performance:
-        TBD
-
+        -actually it makes the slow start much worse...
+            but the performance stability is incredibly obvious once 
+            the value net warms up
+            
         Flaws:
-        TBD
+        -the code is quite a bit slower. less fps.
 
         Benefit:
-        TBD
+        -perhaps providing better stability, 
+            and the ability to prevent the value net from overfitting on 
+            recent data. But that shouldnt be a problem with a large replay buffer, 
+            as the buffer should be full of data from long ago.
+
+        Potential:
 
         Output Sample:
         >>>
-            total samples: 8691, ep 63: high-score      923.000, score      296.000
-            total samples: 8967, ep 64: high-score      923.000, score      276.000
-            total samples: 9542, ep 65: high-score      923.000, score      575.000
-            total samples: 10349, ep 66: high-score      923.000, score      807.000
-            total samples: 10910, ep 67: high-score      923.000, score      561.000
-            total samples: 11266, ep 68: high-score      923.000, score      356.000
-            total samples: 11613, ep 69: high-score      923.000, score      347.000
-            total samples: 12054, ep 70: high-score      923.000, score      441.000
-            total samples: 12437, ep 71: high-score      923.000, score      383.000
-            total samples: 12724, ep 72: high-score      923.000, score      287.000
-            total samples: 12989, ep 73: high-score      923.000, score      265.000
-            total samples: 13247, ep 74: high-score      923.000, score      258.000
+            total samples: 19245, ep 152: high-score      840.000, score      213.000
+            TBD
 '''
 
 class ReplayBuffer:
@@ -119,18 +117,19 @@ class Agent():
     def __init__(self, learn_rate, input_shape, num_actions, batch_size):
         self.net = Network(learn_rate, input_shape, num_actions)
         self.target_net = Network(learn_rate, input_shape, num_actions)
+
         self.memory = ReplayBuffer(size=100000, state_shape=input_shape)
         self.num_actions = num_actions
         self.batch_size = batch_size
         self.gamma = 0.99
+        self.tau = 0.1
 
     def choose_action(self, observation):
-        self.net.eval()
-
         state = torch.tensor(observation).float().detach()
         state = state.to(self.net.device)
         state = state.unsqueeze(0)
         
+        self.net.eval()
         policy = self.net.get_policy(state)
 
         policy = policy[0]
@@ -140,10 +139,14 @@ class Agent():
         self.action_log_prob = actions_probs.log_prob(action)
         return action.item()
 
-    def get_log_probs(self, states, actions):
-        self.net.train()
+    def get_log_probs(self, states, actions, target=False):
+        if not target:
+            self.net.train()
+            policy = self.net.get_policy(states)
+        else:
+            self.target_net.train()
+            policy = self.target_net.get_policy(states)
 
-        policy = self.net.get_policy(states)
         policy = F.softmax(policy, dim=1)
         actions_dist = torch.distributions.Categorical(policy)
         action_log_probs = actions_dist.log_prob(actions)
@@ -153,11 +156,26 @@ class Agent():
     def store_memory(self, state, action, reward, state_, done):
         self.memory.store_memory(state, action, reward, state_, done)
 
+    def update_params(self):
+        net_params = self.net.named_parameters()
+        target_net_params = self.target_net.named_parameters()
+
+        target_net = dict(net_params)
+        net_ = dict(target_net_params)
+
+        for name in target_net:
+            target_net[name] = (
+                self.tau * target_net[name].clone()
+                + (1 - self.tau) * net_[name].clone())
+
+        self.target_net.load_state_dict(target_net)
+
     def learn(self):
         if self.memory.count < self.batch_size:
             return
 
         self.net.train()
+        # self.target_net.train()
         self.net.optimizer.zero_grad()
 
         states, actions, rewards, states_, dones = \
@@ -169,7 +187,7 @@ class Agent():
         dones   = torch.tensor( dones   ).to(self.net.device)
         
         values  = self.net.get_values(states)
-        values_ = self.net.get_values(states_)
+        values_ = self.target_net.get_values(states_)
         values_[dones] = 0.0
 
         targets = rewards + self.gamma * values_
@@ -183,6 +201,8 @@ class Agent():
         loss = actor_loss + critic_loss
         loss.backward()
         self.net.optimizer.step()
+
+        self.update_params()
 
 if __name__ == '__main__':
     env = gym.make('CartPole-v1').unwrapped
