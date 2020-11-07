@@ -130,7 +130,6 @@ class Agent():
         self.net_copy_interval = 10
 
     def choose_action(self, observation, target=False):
-
         state = torch.tensor(observation).float().detach()
         state = state.to(self.net.device)
         state = state.unsqueeze(0)
@@ -150,8 +149,6 @@ class Agent():
         return action.item()
 
     def get_log_probs(self, states, actions, target=False):
-        
-
         if not target:
             self.net.train()
             policy = self.net.get_policy(states)
