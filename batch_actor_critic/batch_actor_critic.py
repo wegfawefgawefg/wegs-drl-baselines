@@ -50,10 +50,11 @@ class Network(torch.nn.Module):
 
         self.fc1 = nn.Linear(*input_shape,  self.fc1_dims)
         self.fc2 = nn.Linear( self.fc1_dims, self.fc2_dims)
-        self.fc3 = nn.Linear( self.fc2_dims, num_actions  )
+
+        self.critic = nn.Linear( self.fc2_dims, 1)
+        self.actor  = nn.Linear( self.fc2_dims, num_actions  )
 
         self.optimizer = optim.Adam(self.parameters(), lr=learn_rate)
-        self.loss = nn.MSELoss()
         # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.device = torch.device("cpu")
         self.to(self.device)
@@ -61,49 +62,58 @@ class Network(torch.nn.Module):
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        value = self.critic(x)
+        policy = self.actor(x)
 
-        return x
+        return value, policy
 
-class LinearSchedule:
-    def __init__(self, start, end, num_steps):
-        self.delta = (end - start) / float(num_steps)
-        self.num = start - self.delta
-        self.count = 0
-        self.num_steps = num_steps
+    def get_values(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        value = self.critic(x)
 
-    def value(self):
-        return self.num
+        return value
 
-    def step(self):
-        if self.count <= self.num_steps:
-            self.num += self.delta
-        self.count += 1
+    def get_policy(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        policy = self.actor(x)
 
-        return self.num
+        return policy
 
 class Agent():
     def __init__(self, learn_rate, input_shape, num_actions, batch_size):
         self.net = Network(learn_rate, input_shape, num_actions)
         self.memory = ReplayBuffer(size=100000, state_shape=input_shape)
-        self.epsilon = LinearSchedule(start=1.0, end=0.01, num_steps=2000)
-        self.batch_size = batch_size
         self.num_actions = num_actions
+        self.batch_size = batch_size
         self.gamma = 0.99
 
     def choose_action(self, observation):
-        if random.random() > self.epsilon.value():
-            state = torch.tensor(observation).float().detach()
-            state = state.to(self.net.device)
-            state = state.unsqueeze(0)
+        self.net.eval()
 
-            q_values = self.net(state)
-            action = torch.argmax(q_values).item()
+        state = torch.tensor(observation).float().detach()
+        state = state.to(self.net.device)
+        state = state.unsqueeze(0)
+        
+        policy = self.net.get_policy(state)
 
-            return action
-        else:
-            action = random.randint(0, self.num_actions - 1)
-            return action
+        policy = policy[0]
+        policy = F.softmax(policy, dim=0)
+        actions_probs = torch.distributions.Categorical(policy)
+        action = actions_probs.sample()
+        self.action_log_prob = actions_probs.log_prob(action)
+        return action.item()
+
+    def get_log_probs(self, states, actions):
+        self.net.train()
+
+        policy = self.net.get_policy(states)
+        policy = F.softmax(policy, dim=1)
+        actions_dist = torch.distributions.Categorical(policy)
+        action_log_probs = actions_dist.log_prob(actions)
+        action_log_probs = action_log_probs.unsqueeze(0).T
+        return action_log_probs
 
     def store_memory(self, state, action, reward, state_, done):
         self.memory.store_memory(state, action, reward, state_, done)
@@ -112,8 +122,9 @@ class Agent():
         if self.memory.count < self.batch_size:
             return
 
+        self.net.train()
         self.net.optimizer.zero_grad()
-    
+
         states, actions, rewards, states_, dones = \
             self.memory.sample(self.batch_size)
         states  = torch.tensor( states  ).to(self.net.device)
@@ -122,29 +133,25 @@ class Agent():
         states_ = torch.tensor( states_ ).to(self.net.device)
         dones   = torch.tensor( dones   ).to(self.net.device)
         
-        batch_indices = np.arange(self.batch_size, dtype=np.int64)
+        values  = self.net.get_values(states)
+        values_ = self.net.get_values(states_)
+        values_[dones] = 0.0
 
-        things = self.net(states)
-        print(things)
-        print(things.shape)
+        targets = rewards + self.gamma * values_
+        td = targets - values
 
-        action_qs = self.net(states)[batch_indices, actions]    #   (batch_size, 1)
+        log_probs = self.get_log_probs(states, actions)
 
-        all_qs_ =   self.net(states_)               #   (batch_size, num_actions)
-        action_qs_ = torch.max(all_qs_, dim=1)[0]   #   (batch_size, 1)
-        action_qs_[dones] = 0.0
+        actor_loss = (-log_probs * td).mean()
+        critic_loss = (td**2).mean()
 
-        q_targets = rewards + self.gamma * action_qs_
-
-        loss = self.net.loss(q_targets, action_qs).to(self.net.device)
+        loss = actor_loss + critic_loss
         loss.backward()
         self.net.optimizer.step()
 
-        self.epsilon.step()
-
 if __name__ == '__main__':
     env = gym.make('CartPole-v1').unwrapped
-    agent = Agent(learn_rate=0.001, input_shape=(4,), num_actions=2, batch_size=8)
+    agent = Agent(learn_rate=0.0001, input_shape=(4,), num_actions=2, batch_size=64)
 
     high_score = -math.inf
     episode = 0
