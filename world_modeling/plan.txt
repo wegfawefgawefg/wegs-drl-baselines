@@ -1,0 +1,28 @@
+test world model
+
+world model being used in place of next state means at best the agent can do as well as the non world modeling one...
+because next_state is noiseless. WM(state) is noiseful. 
+so to get benefits from the world model, you have to use the world model for something other than 1-step next state prediction.
+
+naive limited ideas:
+a. perhaps for 2-step?
+
+1. the world model needs to share feature space with the actor, or critic, 
+2. the world model can be used for nstep in cases where the env is not settable
+3. the world model can be used to detect divergence points
+4. the world model can be used to predict far ahead.
+5. the world model is part of the reward structure. 
+6. the world model is used to predict the specific world result of an action.
+7. the world model is used to simulate past detected divergences.
+8. the world model is used to establish a visual goal for the agent, 
+    by fixing the farthest prediction.
+    and making the error between the actual prediction and the target.
+9. the world model is used to create a searchable decision tree
+10. the world model is used to predict results of other agents in the space? (probably over anthropomorphization)
+11. trajectory refinement
+
+
+
+a. try basic world model
+b. use world model for next step prediction
+c. use world model for 2 step prediction

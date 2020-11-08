@@ -1,0 +1,20 @@
+This is a basically minimal implementation of ddpg.
+It does not contain:
+    1. initialization.
+    2. noise
+
+Perhaps a better description would be... 
+Soft Double Dueling Batch Actor Critic.
+
+Which without the frills, is what DDPG is.
+However ddpg has a different actor loss. 
+Where in ac the actor pushes its action probabilities towards a
+nearsighted increasing reward (as nearsighted as the critics value predictions),
+DDPG pushes its actor parameters towards maximizing greedily selected 
+action advantage values. These are fundamentally different. 
+I suspect DDPG is inherently more greedy with this loss function, 
+but can more easily differentiate between actions with similar results 
+in the same state. (much like dueling... unsurprisingly. bc dueling 
+focuses on the action advantage stream) ((list cases where dueling is worse due to this.))
+
+

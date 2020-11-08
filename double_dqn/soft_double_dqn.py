@@ -45,16 +45,15 @@ class ReplayBuffer:
 class Network(torch.nn.Module):
     def __init__(self, learn_rate, input_shape, num_actions):
         super().__init__()
-        self.fc1_dims = 1024
-        self.fc2_dims = 512
+        self.fc1Dims = 1024
+        self.fc2Dims = 512
 
-        self.fc1 = nn.Linear(*input_shape,  self.fc1_dims)
-        self.fc2 = nn.Linear( self.fc1_dims, self.fc2_dims)
-
-        self.critic = nn.Linear( self.fc2_dims, 1)
-        self.actor  = nn.Linear( self.fc2_dims, num_actions  )
+        self.fc1 = nn.Linear(*input_shape,  self.fc1Dims)
+        self.fc2 = nn.Linear( self.fc1Dims, self.fc2Dims)
+        self.fc3 = nn.Linear( self.fc2Dims, num_actions  )
 
         self.optimizer = optim.Adam(self.parameters(), lr=learn_rate)
+        self.loss = nn.MSELoss()
         # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.device = torch.device("cpu")
         self.to(self.device)
@@ -62,69 +61,77 @@ class Network(torch.nn.Module):
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        value = self.critic(x)
-        policy = self.actor(x)
+        x = self.fc3(x)
 
-        return value, policy
+        return x
 
-    def get_values(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        value = self.critic(x)
+class LinearSchedule:
+    def __init__(self, start, end, num_steps):
+        self.delta = (end - start) / float(num_steps)
+        self.num = start - self.delta
+        self.count = 0
+        self.num_steps = num_steps
 
-        return value
+    def value(self):
+        return self.num
 
-    def get_policy(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        policy = self.actor(x)
+    def step(self):
+        if self.count <= self.num_steps:
+            self.num += self.delta
+        self.count += 1
 
-        return policy
+        return self.num
 
 class Agent():
     def __init__(self, learn_rate, input_shape, num_actions, batch_size):
         self.net = Network(learn_rate, input_shape, num_actions)
+        self.target_net = Network(learn_rate, input_shape, num_actions)
+
         self.memory = ReplayBuffer(size=100000, state_shape=input_shape)
-        self.num_actions = num_actions
+        self.epsilon = LinearSchedule(start=1.0, end=0.01, num_steps=2000)
+
         self.batch_size = batch_size
+        self.num_actions = num_actions
         self.gamma = 0.99
+        self.tau = 0.1
 
     def choose_action(self, observation):
-        self.net.eval()
+        if random.random() > self.epsilon.value():
+            state = torch.tensor(observation).float().detach()
+            state = state.to(self.net.device)
+            state = state.unsqueeze(0)
 
-        state = torch.tensor(observation).float().detach()
-        state = state.to(self.net.device)
-        state = state.unsqueeze(0)
-        
-        policy = self.net.get_policy(state)
+            q_values = self.net(state)
+            action = torch.argmax(q_values).item()
 
-        policy = policy[0]
-        policy = F.softmax(policy, dim=0)
-        actions_probs = torch.distributions.Categorical(policy)
-        action = actions_probs.sample()
-        self.action_log_prob = actions_probs.log_prob(action)
-        return action.item()
-
-    def get_log_probs(self, states, actions):
-        self.net.train()
-
-        policy = self.net.get_policy(states)
-        policy = F.softmax(policy, dim=1)
-        actions_dist = torch.distributions.Categorical(policy)
-        action_log_probs = actions_dist.log_prob(actions)
-        action_log_probs = action_log_probs.unsqueeze(0).T
-        return action_log_probs
+            return action
+        else:
+            action = random.randint(0, self.num_actions - 1)
+            return action
 
     def store_memory(self, state, action, reward, state_, done):
         self.memory.store_memory(state, action, reward, state_, done)
+
+    def update_params(self):
+        net_params = self.net.named_parameters()
+        target_net_params = self.target_net.named_parameters()
+
+        target_net = dict(net_params)
+        net_ = dict(target_net_params)
+
+        for name in target_net:
+            target_net[name] = (
+                self.tau * target_net[name].clone()
+                + (1 - self.tau) * net_[name].clone())
+
+        self.target_net.load_state_dict(target_net)
 
     def learn(self):
         if self.memory.count < self.batch_size:
             return
 
-        self.net.train()
         self.net.optimizer.zero_grad()
-
+    
         states, actions, rewards, states_, dones = \
             self.memory.sample(self.batch_size)
         states  = torch.tensor( states  ).to(self.net.device)
@@ -133,26 +140,27 @@ class Agent():
         states_ = torch.tensor( states_ ).to(self.net.device)
         dones   = torch.tensor( dones   ).to(self.net.device)
         
-        values  = self.net.get_values(states)
-        values_ = self.net.get_values(states_)
-        values_[dones] = 0.0
+        batch_indices = np.arange(self.batch_size, dtype=np.int64)
+        action_qs = self.net(states)[batch_indices, actions]    #   (batch_size, 1)
 
-        targets = rewards + self.gamma * values_
-        td = targets - values
+        qs_ =   self.target_net(states_)            #   (batch_size, num_actions)
+        policy_qs = self.net(states_)               #   (batch_size, num_actions)
+        actions_ = torch.max(policy_qs, dim=1)[1]   #   (batch_size, 1)
+        action_qs_ = qs_[batch_indices, actions_]
+        action_qs_[dones] = 0.0
 
-        log_probs = self.get_log_probs(states, actions)
-        #   should pool log probs somehow
+        q_targets = rewards + self.gamma * action_qs_
 
-        actor_loss = (-log_probs * td).mean()
-        critic_loss = (td**2).mean()
-
-        loss = actor_loss + critic_loss
+        loss = self.net.loss(q_targets, action_qs).to(self.net.device)
         loss.backward()
         self.net.optimizer.step()
 
+        self.epsilon.step()
+        self.update_params()
+
 if __name__ == '__main__':
     env = gym.make('CartPole-v1').unwrapped
-    agent = Agent(learn_rate=0.0001, input_shape=(4,), num_actions=2, batch_size=64)
+    agent = Agent(learn_rate=0.001, input_shape=(4,), num_actions=2, batch_size=64)
 
     high_score = -math.inf
     episode = 0

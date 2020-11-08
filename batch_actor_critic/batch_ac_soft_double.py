@@ -33,11 +33,24 @@ import torch.nn.functional as F
             as the buffer should be full of data from long ago.
 
         Potential:
+        -add dueling and its pretty much DDPG
 
         Output Sample:
         >>>
-            total samples: 19245, ep 152: high-score      840.000, score      213.000
-            TBD
+            total samples: 22260, ep 203: high-score      521.000, score      240.000
+            total samples: 22584, ep 204: high-score      521.000, score      324.000
+            total samples: 22973, ep 205: high-score      521.000, score      389.000
+            total samples: 23423, ep 206: high-score      521.000, score      450.000
+            total samples: 23785, ep 207: high-score      521.000, score      362.000
+            total samples: 24048, ep 208: high-score      521.000, score      263.000
+            total samples: 24315, ep 209: high-score      521.000, score      267.000
+            total samples: 24602, ep 210: high-score      521.000, score      287.000
+            total samples: 25129, ep 211: high-score      527.000, score      527.000
+            total samples: 25766, ep 212: high-score      637.000, score      637.000
+            total samples: 26306, ep 213: high-score      637.000, score      540.000
+            total samples: 27017, ep 214: high-score      711.000, score      711.000
+            total samples: 27696, ep 215: high-score      711.000, score      679.000
+            total samples: 44626, ep 216: high-score    16930.000, score    16930.000
 '''
 
 class ReplayBuffer:
