@@ -1,0 +1,261 @@
+import math
+import random
+
+import gym       
+from cartpole_visualizer import SettableCartPoleEnv
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+
+'''
+        --  World Model But Sharing Weights With The DQN --
+        
+        Goal:
+        -see if the shared backbone trains features that are useful for the DQN
+
+        Performance:
+        -awful. extremely noisy world model
+        -worse than normal dqn
+
+        Flaws:
+        -doesnt seem to improve dqn peprformance at all lol...
+            actually seems to make it worse
+        -world model is tasked with predicting next action,  
+
+        Potential:
+        -this idea maybe sucks. abandon it
+
+        Output Sample:
+        >>>
+            total samples: 68942, ep 263: high-score     3913.000, score      145.000
+            total samples: 69093, ep 264: high-score     3913.000, score      151.000
+            total samples: 69238, ep 265: high-score     3913.000, score      145.000
+            total samples: 69368, ep 266: high-score     3913.000, score      130.000
+            total samples: 69510, ep 267: high-score     3913.000, score      142.000
+            total samples: 69654, ep 268: high-score     3913.000, score      144.000
+            total samples: 69805, ep 269: high-score     3913.000, score      151.000
+            total samples: 69974, ep 270: high-score     3913.000, score      169.000
+            total samples: 70175, ep 271: high-score     3913.000, score      201.000
+            total samples: 70339, ep 272: high-score     3913.000, score      164.000
+            total samples: 70532, ep 273: high-score     3913.000, score      193.000
+'''
+
+class ReplayBuffer:
+    def __init__(self, size, state_shape):
+        self.size = size
+        self.count = 0
+
+        self.state_memory       = np.zeros((self.size, *state_shape), dtype=np.float32)
+        self.action_memory      = np.zeros( self.size,                dtype=np.int64  )
+        self.reward_memory      = np.zeros( self.size,                dtype=np.float32)
+        self.next_state_memory  = np.zeros((self.size, *state_shape), dtype=np.float32)
+        self.done_memory        = np.zeros( self.size,                dtype=np.bool   )
+
+    def store_memory(self, state, action, reward, next_state, done):
+        index = self.count % self.size 
+        
+        self.state_memory[index]      = state
+        self.action_memory[index]     = action
+        self.reward_memory[index]     = reward
+        self.next_state_memory[index] = next_state
+        self.done_memory[index]       = done
+
+        self.count += 1
+
+    def sample(self, sample_size):
+        highest_index = min(self.count, self.size)
+        indices = np.random.choice(highest_index, sample_size, replace=False)
+
+        states      = self.state_memory[indices]
+        actions     = self.action_memory[indices]
+        rewards     = self.reward_memory[indices]
+        next_states = self.next_state_memory[indices]
+        dones       = self.done_memory[indices]
+
+        return states, actions, rewards, next_states, dones
+
+class Network(torch.nn.Module):
+    def __init__(self, learn_rate, input_shape, num_actions):
+        super().__init__()
+        self.fc1Dims = 256
+        self.fc2Dims = 128
+
+        self.fc1 = nn.Linear(*input_shape,  self.fc1Dims)
+        self.fc2 = nn.Linear( self.fc1Dims, self.fc2Dims)
+
+        self.policy = nn.Linear( self.fc2Dims, num_actions  )
+        self.world_model = nn.Linear(self.fc2Dims, *input_shape )
+
+        self.optimizer = optim.Adam(self.parameters(), lr=learn_rate)
+        self.loss = nn.MSELoss()
+        # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cpu")
+        self.to(self.device)
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        policy = self.policy(x)
+        next_state_prediction = self.world_model(x)
+
+        return policy, next_state_prediction
+
+    def get_policy(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        policy = self.policy(x)
+
+        return policy
+
+    def predict_next_state(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        next_state_prediction = self.world_model(x)
+
+        return next_state_prediction
+
+class LinearSchedule:
+    def __init__(self, start, end, num_steps):
+        self.delta = (end - start) / float(num_steps)
+        self.num = start - self.delta
+        self.count = 0
+        self.num_steps = num_steps
+
+    def value(self):
+        return self.num
+
+    def step(self):
+        if self.count <= self.num_steps:
+            self.num += self.delta
+        self.count += 1
+
+        return self.num
+
+class Agent():
+    def __init__(self, learn_rate, input_shape, num_actions, batch_size):
+        self.net = Network(learn_rate, input_shape, num_actions)
+        self.target_net = Network(learn_rate, input_shape, num_actions)
+
+        self.memory = ReplayBuffer(size=100000, state_shape=input_shape)
+        self.epsilon = LinearSchedule(start=1.0, end=0.01, num_steps=2000)
+
+        self.batch_size = batch_size
+        self.num_actions = num_actions
+        self.gamma = 0.99
+
+        self.learn_step_counter = 0
+        self.net_copy_interval = 1
+
+    def choose_action(self, observation):
+        if random.random() > self.epsilon.value():
+            state = torch.tensor(observation).float().detach()
+            state = state.to(self.net.device)
+            state = state.unsqueeze(0)
+
+            q_values = self.net.get_policy(state)
+            action = torch.argmax(q_values).item()
+
+            return action
+        else:
+            action = random.randint(0, self.num_actions - 1)
+            return action
+
+    def store_memory(self, state, action, reward, state_, done):
+        self.memory.store_memory(state, action, reward, state_, done)
+
+    def predict_next_state(self, state):
+        self.net.eval()
+
+        state = torch.tensor(state).float().detach()
+        state = state.to(self.net.device)
+        state = state.unsqueeze(0)
+
+        state_ = self.net.predict_next_state(state)
+        state_ = state_[0]
+        state_ = state_.cpu().detach().numpy()
+
+        return state_
+
+    def learn(self):
+        if self.memory.count < self.batch_size:
+            return
+    
+        states, actions, rewards, states_, dones = \
+            self.memory.sample(self.batch_size)
+        states  = torch.tensor( states  ).to(self.net.device)
+        actions = torch.tensor( actions ).to(self.net.device)
+        rewards = torch.tensor( rewards ).to(self.net.device)
+        states_ = torch.tensor( states_ ).to(self.net.device)
+        dones   = torch.tensor( dones   ).to(self.net.device)
+
+        self.net.train()
+
+        ''' TRAIN WORLD MODEL '''
+        policy, p_states_ = self.net(states)
+        world_model_loss = self.net.loss(p_states_, states)
+        
+        ''' TRAIN AGENT '''
+        batch_indices = np.arange(self.batch_size, dtype=np.int64)
+        action_qs = policy[batch_indices, actions]      #   (batch_size, 1)
+
+        qs_ =   self.target_net.get_policy(states_)     #   (batch_size, num_actions)
+        policy_qs = self.net.get_policy(states_)        #   (batch_size, num_actions)
+        actions_ = torch.max(policy_qs, dim=1)[1]       #   (batch_size, 1)
+        action_qs_ = qs_[batch_indices, actions_]
+        action_qs_[dones] = 0.0
+
+        q_targets = rewards + self.gamma * action_qs_
+
+        policy_loss = self.net.loss(q_targets, action_qs).to(self.net.device)
+
+        self.net.optimizer.zero_grad()
+        (world_model_loss + policy_loss).backward()
+        self.net.optimizer.step()
+
+        self.epsilon.step()
+        if self.learn_step_counter % self.net_copy_interval == 0:
+            self.target_net.load_state_dict(self.net.state_dict())
+        self.learn_step_counter += 1
+
+if __name__ == '__main__':
+    env = gym.make('CartPole-v1').unwrapped
+    visualizer_env = SettableCartPoleEnv()
+    agent = Agent(learn_rate=0.001, input_shape=(4,), num_actions=2, batch_size=64)
+
+    high_score = -math.inf
+    episode = 0
+    num_samples = 0
+    while True:
+        done = False
+        state = env.reset()
+
+        score, frame = 0, 1
+        while not done:
+            env.render()
+
+            action = agent.choose_action(state)
+            state_, reward, done, info = env.step(action)
+            agent.store_memory(state, action, reward, state_, done)
+            agent.learn()
+
+            predicted_next_state = agent.predict_next_state(state)
+            visualizer_env.set_state(predicted_next_state)
+            visualizer_env.render()
+
+            # world_model_error = np.abs(predicted_next_state - state_).sum()
+            # print(f"wm_error {world_model_error}")
+
+            state = state_
+
+            num_samples += 1
+            score += reward
+            frame += 1
+
+        high_score = max(high_score, score)
+
+        print(("total samples: {}, ep {}: high-score {:12.3f}, score {:12.3f}").format(
+            num_samples, episode, high_score, score, frame))
+
+        episode += 1

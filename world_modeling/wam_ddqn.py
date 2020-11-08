@@ -10,38 +10,37 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 '''
-        --  Training A World Model --
-        starting off with a world model trained on the side
+        --  Training A World Action Model --
+        Give the world model the current action as well.
 
         Goal:
-        -see how accurate a world model can be.
-        -get basic wm code down
+        -make the world model not have to predict the action taken as well
 
         Performance:
-        -should be identical to ddqn as no logic is changed
+        -should be identical to ddqn still
+        -the world model doesnt seem any more precise... very similar loss
 
         Flaws:
         -predicted next state is noisy, 
         -has a hard time predicting next state for uncommon states (noise increases. qualitatively obvious)
-        -world model is tasked with predicting next action,  
-            -which is stupid because theres a network whos job it is to already do that.
-                so we have self simulation here.
-            -maybe its not stupid... bc for predicting far forward, 
 
         Potential:
-        -world model can be injected into loss later
+        -this is near intrinsic curiosity module
 
         Output Sample:
         >>>
-            meaningless
+            wm_error 0.5000302089496248
+            wm_error 0.48847666408228785
+            wm_error 0.49641973881662504
+            wm_error 0.4900784474355991
+            wm_error 0.4965915794698861
+            wm_error 0.49249339059316666
+            wm_error 0.49592514688093187
+            wm_error 0.48827728794249037
 
     Coder Notes:   
-        -split the learn function up into 2 sub functions, 
-            train_world_model
-                and
-            train agent
-        -made a modified version of the cartpole env that supports setting the state
-            -has no way of naming the window without more work than is worth
+        -rearanged the training code a little bit, 
+        -had to do some fuckery to concatenate the onehot encodings of the actions to the states
 '''
 
 class ReplayBuffer:
@@ -81,8 +80,8 @@ class ReplayBuffer:
 class Network(torch.nn.Module):
     def __init__(self, learn_rate, input_shape, num_actions):
         super().__init__()
-        self.fc1Dims = 1024
-        self.fc2Dims = 512
+        self.fc1Dims = 128
+        self.fc2Dims = 64
 
         self.fc1 = nn.Linear(*input_shape,  self.fc1Dims)
         self.fc2 = nn.Linear( self.fc1Dims, self.fc2Dims)
@@ -103,14 +102,14 @@ class Network(torch.nn.Module):
 
 class WorldModel(torch.nn.Module):
     ''' predicts next_state from state  '''
-    def __init__(self, learn_rate, input_shape):
+    def __init__(self, learn_rate, input_shape, state_shape):
         super().__init__()
-        self.fc1Dims = 1024
-        self.fc2Dims = 512
+        self.fc1Dims = 64
+        self.fc2Dims = 64
 
         self.fc1 = nn.Linear(*input_shape,  self.fc1Dims)
         self.fc2 = nn.Linear( self.fc1Dims, self.fc2Dims)
-        self.fc3 = nn.Linear( self.fc2Dims, *input_shape)
+        self.fc3 = nn.Linear( self.fc2Dims, *state_shape)
 
         self.optimizer = optim.Adam(self.parameters(), lr=learn_rate)
         self.loss = nn.MSELoss()
@@ -146,7 +145,9 @@ class Agent():
     def __init__(self, learn_rate, input_shape, num_actions, batch_size):
         self.net = Network(learn_rate, input_shape, num_actions)
         self.target_net = Network(learn_rate, input_shape, num_actions)
-        self.world_model = WorldModel(learn_rate, input_shape)
+        self.world_model = WorldModel(learn_rate, 
+            input_shape=(input_shape[0] + num_actions, ),
+            state_shape=input_shape)
 
         self.memory = ReplayBuffer(size=100000, state_shape=input_shape)
         self.epsilon = LinearSchedule(start=1.0, end=0.01, num_steps=2000)
@@ -175,34 +176,43 @@ class Agent():
     def store_memory(self, state, action, reward, state_, done):
         self.memory.store_memory(state, action, reward, state_, done)
 
-    def predict_next_state(self, state):
+    def predict_next_state(self, state, action):
         self.world_model.eval()
 
         state = torch.tensor(state).float().detach()
         state = state.to(self.net.device)
-        state = state.unsqueeze(0)
 
-        state_ = self.world_model(state)
-        state_ = state_[0]
+        action = torch.tensor(action).long().detach()
+        action = action.to(self.net.device)
+        action = action.unsqueeze(0)
+
+        action_one_hot = torch.zeros(self.num_actions)
+        action_one_hot[action] = 1.0
+
+        state_action = torch.cat([state, action_one_hot])
+        state_ = self.world_model(state_action)
         state_ = state_.cpu().detach().numpy()
 
         return state_
 
-    def predict_next_states(self, state):
-        states = torch.tensor(state).float().detach()
-        states = state.to(self.net.device)
-        states = state.unsqueeze(0)
+    def predict_next_states(self, states, actions):
+        #   one hot encode the actions
+        actions = actions.long().detach()
+        action_one_hots = torch.zeros((self.batch_size, self.num_actions), dtype=torch.float32)
+        indices = torch.arange(self.batch_size, dtype=torch.int64)
+        action_one_hots[indices, actions] = 1.0
 
-        states_ = self.world_model(state)
+        states_actions = torch.cat([states, action_one_hots], dim=1)
+        states_ = self.world_model(states_actions)
 
         return states_
 
-    def train_world_model(self, states):
+    def train_world_model(self, states, actions):
         self.world_model.train()
-
-        p_states_ = self.predict_next_states(states)
-        world_model_loss = self.world_model.loss(p_states_, states)
         
+        p_states_ = self.predict_next_states(states, actions)
+        world_model_loss = self.world_model.loss(p_states_, states)
+
         self.world_model.optimizer.zero_grad()
         world_model_loss.backward()
         self.world_model.optimizer.step()
@@ -239,7 +249,7 @@ class Agent():
         states_ = torch.tensor( states_ ).to(self.net.device)
         dones   = torch.tensor( dones   ).to(self.net.device)
 
-        self.train_world_model(states)
+        self.train_world_model(states, actions)
         self.train_agent(states, actions, rewards, states_, dones)
 
         self.epsilon.step()
@@ -268,9 +278,12 @@ if __name__ == '__main__':
             agent.store_memory(state, action, reward, state_, done)
             agent.learn()
 
-            predicted_next_state = agent.predict_next_state(state)
+            predicted_next_state = agent.predict_next_state(state, action)
             visualizer_env.set_state(predicted_next_state)
             visualizer_env.render()
+
+            world_model_error = np.abs(predicted_next_state - state_).sum()
+            print(f"wm_error {world_model_error}")
 
             state = state_
 

@@ -23,6 +23,9 @@ a. perhaps for 2-step?
 
 
 
-a. try basic world model
-b. use world model for next step prediction
+done        a. try basic world model                                            
+done        b. use world model for next step prediction
+done        c. inject action into state for next step prediction
+d. make the world model share weights with the rest of the network
 c. use world model for 2 step prediction
+d. 
