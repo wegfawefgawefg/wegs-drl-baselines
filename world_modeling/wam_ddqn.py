@@ -26,6 +26,7 @@ import torch.nn.functional as F
 
         Potential:
         -this is near intrinsic curiosity module
+        -may help performance more in more interesting environment
 
         Output Sample:
         >>>
