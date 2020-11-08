@@ -21,17 +21,27 @@ import torch.nn.functional as F
         -should be identical to ddqn as no logic is changed
 
         Flaws:
-        TBD
-
-        Benefit:
-        TBD
+        -predicted next state is noisy, 
+        -has a hard time predicting next state for uncommon states (noise increases. qualitatively obvious)
+        -world model is tasked with predicting next action,  
+            -which is stupid because theres a network whos job it is to already do that.
+                so we have self simulation here.
+            -maybe its not stupid... bc for predicting far forward, 
 
         Potential:
-        -maybe soft updates
+        -world model can be injected into loss later
 
         Output Sample:
         >>>
             meaningless
+
+    Coder Notes:   
+        -split the learn function up into 2 sub functions, 
+            train_world_model
+                and
+            train agent
+        -made a modified version of the cartpole env that supports setting the state
+            -has no way of naming the window without more work than is worth
 '''
 
 class ReplayBuffer:
