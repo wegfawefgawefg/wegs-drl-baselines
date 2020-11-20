@@ -16,9 +16,7 @@ class Network(torch.nn.Module):
 
         self.fc1 = nn.Linear(*input_shape,  self.fc1_dims)
         self.fc2 = nn.Linear( self.fc1_dims, self.fc2_dims)
-
-        self.critic = nn.Linear( self.fc2_dims, 1)
-        self.actor  = nn.Linear( self.fc2_dims, num_actions  )
+        self.fc3  = nn.Linear( self.fc2_dims, num_actions  )
 
         self.optimizer = optim.Adam(self.parameters(), lr=learn_rate)
         # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -28,65 +26,73 @@ class Network(torch.nn.Module):
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        value = self.critic(x)
-        policy = self.actor(x)
+        urge = self.fc3(x)
 
-        return value, policy
+        return urge
+
+class LinearSchedule:
+    def __init__(self, start, end, num_steps):
+        self.delta = (end - start) / float(num_steps)
+        self.num = start - self.delta
+        self.count = 0
+        self.num_steps = num_steps
+
+    def value(self):
+        return self.num
+
+    def step(self):
+        if self.count <= self.num_steps:
+            self.num += self.delta
+        self.count += 1
+
+        return self.num
 
 class Agent():
-    def __init__(self, learn_rate, input_shape, num_actions):
+    def __init__(self, learn_rate, input_shape, num_actions, batch_size):
         self.net = Network(learn_rate, input_shape, num_actions)
         self.num_actions = num_actions
         self.gamma = 0.99
+        self.epsilon = LinearSchedule(start=1.0, end=0.01, num_steps=2000)
 
     def choose_action(self, observation):
-        self.net.eval()
+        if random.random() > self.epsilon.value():
+            state = torch.tensor(observation).float().detach()
+            state = state.to(self.net.device)
+            state = state.unsqueeze(0)
 
-        state = torch.tensor(observation).float().detach()
-        state = state.to(self.net.device)
-        state = state.unsqueeze(0)
-        
-        _, policy = self.net(state)
+            action_urges = self.net(state)
+            # print(action_urges)
+            action = torch.argmax(action_urges).item()
 
-        policy = policy[0]
-        policy = F.softmax(policy, dim=0)
-        actions_probs = torch.distributions.Categorical(policy)
-        action = actions_probs.sample()
-        self.action_log_prob = actions_probs.log_prob(action)
-        return action.item()
+            return action
+        else:
+            action = random.randint(0, self.num_actions - 1)
+            return action
 
-    def learn(self, state, reward, state_, done):
+    def learn(self, state, action, reward, state_, done, punishment):
         self.net.train()
-        self.net.optimizer.zero_grad()
     
         state = torch.tensor(state).float()
         state = state.to(self.net.device)
         state = state.unsqueeze(0)
 
-        state_ = torch.tensor(state_).float()
-        state_ = state_.to(self.net.device)
-        state_ = state_.unsqueeze(0)
+        urge  = self.net(state)
 
-        reward = torch.tensor(reward, dtype=torch.float).to(self.net.device)
-        done = torch.tensor(done, dtype=torch.bool).to(self.net.device)
+        target = torch.zeros((1, self.num_actions), dtype=torch.float32)
+        # target = urge.clone().detach()
+        if done:
+            target[0, action] -= self.epsilon.value()
 
-        value, _  = self.net(state)
-        value_, _ = self.net(state_)
-        value_[done] = 0.0
-
-        target = reward + self.gamma * value_
-        td = target - value
-
-        actor_loss = -self.action_log_prob * td
-        critic_loss = td**2
-
-        loss = actor_loss + critic_loss
+        self.net.optimizer.zero_grad()
+        loss = F.mse_loss(target, urge)
         loss.backward()
         self.net.optimizer.step()
 
+        self.epsilon.step()
+
 if __name__ == '__main__':
     env = gym.make('CartPole-v1').unwrapped
-    agent = Agent(learn_rate=0.0001, input_shape=(4,), num_actions=2)
+    agent = Agent(learn_rate=0.0001, input_shape=(4,), num_actions=2, batch_size=64)
 
     high_score = -math.inf
     episode = 0
@@ -101,7 +107,7 @@ if __name__ == '__main__':
 
             action = agent.choose_action(state)
             state_, reward, done, info = env.step(action)
-            agent.learn(state, reward, state_, done)
+            agent.learn(state, action, reward, state_, done, 0.1)
 
             state = state_
 

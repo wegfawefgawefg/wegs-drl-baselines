@@ -16,7 +16,7 @@ import torch.nn.functional as F
         Dueling dqn, but with a non greedy online policy gradient actor.
 
         Goal:
-        Essentially, we are removing some burdern from the value estimator.
+        Essentially, we are removing some burden from the value estimator.
         1. the value estimator no longer has to guess the value of the specific actions themselves
         2. the value estimator is no longer burdened with having to predict which action the agent will take next
 
