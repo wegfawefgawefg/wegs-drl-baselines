@@ -25,7 +25,7 @@ from continuous_cartpole import ContinuousCartPoleEnv
         more complicated to implement. So... I'm not going to include the noise. I've played with noise. 
         I've read the propoganda. At the moment I'm not convinced that it even helps most of the time. 
         Additionally, I dont care about the deterministic component. With a high enough tic rate 
-        determinism is an emergent property. Basically this is modified batch actor critic.
+        determinism is an emergent property. Basically this is modified loss batch actor critic.
 
         Goal:
         -to see if ddpg needs the frills
@@ -54,6 +54,7 @@ from continuous_cartpole import ContinuousCartPoleEnv
                     total samples: 54865, ep 208: high-score     1600.000, score        9.000
                     total samples: 54874, ep 209: high-score     1600.000, score        9.000
                     total samples: 54882, ep 210: high-score     1600.000, score        8.000
+        -can semi-silently fail if youre action ranges are not bounded correctly. (lol)
 
         Potential:
         -not satisfactorally stable for a drop in use in continuous envs, but 
