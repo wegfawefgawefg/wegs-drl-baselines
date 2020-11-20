@@ -135,8 +135,6 @@ class Critic(torch.nn.Module):
         self.to(self.device)
 
     def forward(self, states, actions):
-        batch_size = actions.shape[0]
-
         states_encoded = self.state_encoder(states)
         actions_encoded = self.action_encoder(actions)
         states_actions = F.relu(torch.add(states_encoded, actions_encoded))
