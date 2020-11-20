@@ -11,43 +11,54 @@ from continuous_cartpole import ContinuousCartPoleEnv
 
 '''
         --  Simpleton's Deeply Non-Deterministic Policy Gradient --
-        DDPG is essentially Batch Soft-Double Actor Critic, but with some noise added in for exploration. 
-        The intention was to bring the Q(s, a) function to continuous space. 
+        ///////////////////////////////////////////////////////////////////////////////////////////////////
+            TLDR:
+            Lesson learned is that DDPG does not need the frills. 
+            Works fine without noise, batchnorm, or even deterministic policy.
+        ///////////////////////////////////////////////////////////////////////////////////////////////////
+        
+        The intention of DDPG was to bring the Q(s, a) function to continuous space. 
+        But, DDPG is essentially Batch Soft-Double Actor Critic, with some noise added in for exploration. 
         Fun fact: This loss function doesnt seem to work for discrete space at all, 
         because the gradient cant shift the actions to nearby actions.
-        I'm not going to include the noise. I've played with noise, I've read the propoganda. 
-        At the moment I'm not convinced that it even helps most of the time. 
+        More importantly, I don't know where the good performance comes from, and the actual version is much 
+        more complicated to implement. So... I'm not going to include the noise. I've played with noise. 
+        I've read the propoganda. At the moment I'm not convinced that it even helps most of the time. 
         Additionally, I dont care about the deterministic component. With a high enough tic rate 
-        determinism is an emergent property.
-        Basically this is modified batch actor critic.
+        determinism is an emergent property. Basically this is modified batch actor critic.
 
         Goal:
-        -to bring q(s, a) to continuous action spaces
         -to see if ddpg needs the frills
 
         Performance:
-        -gets okay suddenly
-        -never gets amazing reliable scores
-        -seems to get stuck on actions
-        -policy decays after being learned
-            not sure if issue with value side
-            or policy updates are too big
-        -im not impressed
-        -im also not satisfied
+        -learns basics suddenly and quickly
+        -im not impressed with its learning rate but it does eventually become reliable
 
         Flaws:
-        -no discrete. come on. PPO does both.
-        -the actual version is much more complicated to implement
-        -unclear what is the source of the good performance of ddpg, 
-            the fundamental idea or the other random shit in the paper.
-                (noise)
-                (batch norm)
-                    ((batch norm was only added due to the noise shifting the layer outputs))
+        -no discrete
+        -seems to get stuck on actions like normal PG
+        - in the early stage of getting its value/policy bearings, policy decays after being learned
+            -you can see it just by watching...
+            -not sure if issue with value side
+            -or policy updates are too big
+            -dqn does not have this cold start issue. it is extremely greedy for early learning. 
+                (lowers performance ceiling but whatever)
+        -way more sensetive to hyperparameters than the DQN side.
+            -if you choose a LR too big, the policy diverges and you get NANs or maxed out mus/sigmas
+            -if Tau is too low you get "Value Runaways" like in vanilla DQN:
+                >>>
+                    total samples: 53735, ep 204: high-score     1600.000, score      941.000
+                    total samples: 54080, ep 205: high-score     1600.000, score      345.000
+                    total samples: 54349, ep 206: high-score     1600.000, score      269.000
+                    total samples: 54856, ep 207: high-score     1600.000, score      507.000
+                    total samples: 54865, ep 208: high-score     1600.000, score        9.000
+                    total samples: 54874, ep 209: high-score     1600.000, score        9.000
+                    total samples: 54882, ep 210: high-score     1600.000, score        8.000
 
         Potential:
-        -hopefully none. I hope ddpg is outmoded. Just out of spite. (hint: it's not. it keeps getting expanded upon.)
-        -picking the right Tau is difficult. 
-            presumably this would work better on simple envs with a hard target
+        -not satisfactorally stable for a drop in use in continuous envs, but 
+            with twinning, td clamping, etc, the policy stability should clean and then we 
+            basically end up with PPO
 
         Output Sample:
         >>>
@@ -56,22 +67,19 @@ from continuous_cartpole import ContinuousCartPoleEnv
             total samples: 5219, ep 58: high-score      350.000, score      227.000
             total samples: 5435, ep 59: high-score      350.000, score      216.000
             total samples: 5631, ep 60: high-score      350.000, score      196.000
-            total samples: 5897, ep 61: high-score      350.000, score      266.000
-            total samples: 6095, ep 62: high-score      350.000, score      198.000
-            total samples: 6341, ep 63: high-score      350.000, score      246.000
-            total samples: 6799, ep 64: high-score      458.000, score      458.000
-            total samples: 7141, ep 65: high-score      458.000, score      342.000
-            total samples: 7531, ep 66: high-score      458.000, score      390.000
-            total samples: 7923, ep 67: high-score      458.000, score      392.000
-            total samples: 8199, ep 68: high-score      458.000, score      276.000
-            total samples: 8473, ep 69: high-score      458.000, score      274.000
-            total samples: 8666, ep 70: high-score      458.000, score      193.000
-            total samples: 8847, ep 71: high-score      458.000, score      181.000
-            total samples: 9141, ep 72: high-score      458.000, score      294.000
-            total samples: 9631, ep 73: high-score      490.000, score      490.000
+            ...
             total samples: 9823, ep 74: high-score      490.000, score      192.000
             total samples: 9988, ep 75: high-score      490.000, score      165.000
             total samples: 10776, ep 76: high-score      788.000, score      788.000
+            ...
+
+            total samples: 21462, ep 115: high-score      788.000, score      429.000
+            total samples: 21820, ep 116: high-score      788.000, score      358.000
+            total samples: 22145, ep 117: high-score      788.000, score      325.000
+            total samples: 22530, ep 118: high-score      788.000, score      385.000
+            total samples: 22914, ep 119: high-score      788.000, score      384.000
+            total samples: 23155, ep 120: high-score      788.000, score      241.000
+            total samples: 23680, ep 121: high-score      788.000, score      525.000
 '''
 
 class ReplayBuffer:
