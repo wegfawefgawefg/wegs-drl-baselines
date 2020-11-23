@@ -115,8 +115,8 @@ class Actor(torch.nn.Module):
     def __init__(self, layer_sizes, state_shape, num_actions):
         super().__init__()
         self.model = nn.Sequential(
-            nn.Linear(*state_shape,    layer_sizes[0]),     nn.Relu(),
-            nn.Linear( layer_sizes[0], layer_sizes[1]),     nn.Relu(),
+            nn.Linear(*state_shape,    layer_sizes[0]),     nn.ReLU(),
+            nn.Linear( layer_sizes[0], layer_sizes[1]),     nn.ReLU(),
             nn.Linear( layer_sizes[1], num_actions))
 
     def forward(self, x):
@@ -128,7 +128,7 @@ class Agent():
             state_shape, 
             num_actions, 
             action_range,
-            layer_sizes=(256, 256), 
+            layer_sizes=(128, 128), 
             batch_size=64,
             gamma=0.99,
 
@@ -142,7 +142,9 @@ class Agent():
             target_lerp_rate=0.995,
 
             #   update frequencies / delays
-            update_every=50,            
+            num_babbling_steps=100,#100
+            update_every=50,#50,
+            value_maturity_delay=50, #50,
             policy_delay=2,
 
             #   noise
@@ -152,20 +154,25 @@ class Agent():
 
         '''   SETTINGS   '''
         # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu,")
-        self.DEVICE             = torch.device("cpu")
-        
-        self.ACTION_RANGE       = action_range
-        self.BATCH_SIZE         = batch_size
-        self.GAMMA              = gamma
-        self.MIN_BUFFER_FULLNESS = min_buffer_fullness
-        self.UPDATE_EVERY       = update_every
-        self.POLICY_DELAY       = policy_delay
-        self.TAU                = target_lerp_rate
-        self.NOISE_SIZE         = 0.2
-        self.NOISE_CLAMP        = 0.5
+        self.DEVICE               = torch.device("cpu")
+ 
+        self.NUM_ACTIONS          = num_actions
+        self.ACTION_RANGE         = action_range
+        self.BATCH_SIZE           = batch_size
+        self.GAMMA                = gamma
+        self.MIN_BUFFER_FULLNESS  = min_buffer_fullness
+        self.NUM_BABBLING_STEPS   = num_babbling_steps
+        self.UPDATE_EVERY         = update_every
+        self.VALUE_MATURITY_DELAY = value_maturity_delay
+        self.POLICY_DELAY         = policy_delay
+        self.TAU                  = target_lerp_rate
+        self.NOISE_SIZE           = 0.2
+        self.NOISE_CLAMP          = 0.5
 
         '''   STATE   '''
         self.learn_count = 0
+        self.critic_updates_count = 0
+        self.babbling_steps = 0
         self.memory = ReplayBuffer(buffer_size, state_shape, num_actions)
 
         self.actor      = Actor( layer_sizes, state_shape, num_actions)
@@ -210,26 +217,19 @@ class Agent():
         self.update_critic_target_params()
         self.update_actor_target_params()
 
-    def add_action_noise(self, actions):
-        epsilon = torch.randn_like(actions) * self.NOISE_SIZE   #   might should be normal dist instead
-        epsilon = torch.clamp(epsilon, -self.NOISE_CLAMP, self.NOISE_CLAMP)
-        actions = actions + epsilon
-
-        return actions
-
     def choose_actions(self, states, noisy=False, target=False):
         if not target:
-            self.actor.eval()
             actions = self.actor(states)
         else:   #   use target network instead
-            self.target_actor.eval()
             actions = self.target_actor(states)
 
-        actions = self.actor(states)
         actions = torch.tanh(actions)
         actions = self.ACTION_RANGE * actions
         if noisy:
-            actions = self.add_action_noise(actions)
+            epsilon = torch.randn_like(actions) * self.NOISE_SIZE   #   might should be normal dist instead
+            noise = torch.clamp(epsilon, -self.NOISE_CLAMP, self.NOISE_CLAMP)
+            # print(f"action: {actions}, noise: {noise}")
+            actions += noise
         actions = torch.clamp(actions, -self.ACTION_RANGE, self.ACTION_RANGE)
 
         return actions
@@ -237,65 +237,85 @@ class Agent():
     def choose_action(self, states, noisy=False):
         ''' this is the non learnable version of choose_actions() 
             for taking single actions in the env                    '''
-        with torch.no_grad():
-            states = torch.tensor(states).float().detach()
-            states = states.to(self.DEVICE)
-            states = states.unsqueeze(0)
+        if self.babbling_steps <= self.NUM_BABBLING_STEPS:
+            print(("Babbling Mode: ignoring policy. choosing random action. "
+                f"(steps remaining: {self.NUM_BABBLING_STEPS - self.babbling_steps})"))
+            actions = np.random.uniform(low=-self.ACTION_RANGE, high=self.ACTION_RANGE, size=self.NUM_ACTIONS)
+            self.babbling_steps += 1
+        else:
+            with torch.no_grad():
+                states = torch.tensor(states).float().detach()
+                states = states.to(self.DEVICE)
+                states = states.unsqueeze(0)
 
-            actions = self.choose_actions(states, noisy, target=False)
+                actions = self.choose_actions(states, noisy, target=False)
 
-            actions = actions[0]
-            actions = actions.detach().cpu().numpy()
+                actions = actions[0]
+                actions = actions.detach().cpu().numpy()
 
         return actions
 
     def learn(self):
-        if self.memory.count < self.MIN_BUFFER_FULLNESS:
+        if self.babbling_steps <= self.NUM_BABBLING_STEPS:
             return
+        elif (self.memory.count < self.MIN_BUFFER_FULLNESS):
+            print(("Delaying Learning: minumum buffer fullness not achieved. " 
+                f"(remaining needed memories: {self.MIN_BUFFER_FULLNESS - self.memory.count})"))
+            return
+        elif self.learn_count % self.UPDATE_EVERY == 0:
+            for _ in range(self.UPDATE_EVERY):
+                states, actions, rewards, states_, dones = self.memory.sample(self.BATCH_SIZE, self.DEVICE)
+                
+                '''                     critic losses                       '''
+                self.critic_one.train()
+                self.critic_two.train()
+                self.actor.eval()
 
-        states, actions, rewards, states_, dones = self.memory.sample(self.BATCH_SIZE, self.DEVICE)
-        
-        '''                     critic losses                       '''
-        self.critic_one.train() #   do these go here?
-        self.critic_two.train() #   do these go here?
+                values_one = self.critic_one(states, actions)
+                values_two = self.critic_two(states, actions)
 
-        values_one = self.critic_one(states, actions)
-        values_two = self.critic_two(states, actions)
+                with torch.no_grad():   #   future values
+                    actions_ = self.choose_actions(states_, noisy=True, target=True)
 
-        with torch.no_grad():   #   future values
-            actions_ = self.choose_actions(states_, noisy=True, target=True)
+                    values_one_ = self.target_critic_one(states_, actions_)
+                    values_two_ = self.target_critic_two(states_, actions_)
 
-            values_one_ = self.target_critic_one(states_, actions_)
-            values_two_ = self.target_critic_two(states_, actions_)
+                    values_ = torch.min(values_one_, values_two_)
+                    values_[dones] = 0.0
 
-            values_ = torch.min(values_one_, values_two_)
-            values_[dones] = 0.0
+                    target = rewards + self.GAMMA * values_ 
+                
+                critic_one_loss = ((target - values_one)**2).mean()
+                critic_two_loss = ((target - values_two)**2).mean()
+                critic_losses = critic_one_loss + critic_two_loss
+                self.critic_optimizer.zero_grad()
+                critic_losses.backward()
+                self.critic_optimizer.step()
 
-            target = rewards + self.GAMMA * values_ 
-        
-        critic_one_loss = ((target - values_one)**2).mean()
-        critic_two_loss = ((target - values_two)**2).mean()
-        critic_losses = critic_one_loss + critic_two_loss
-        self.critic_optimizer.zero_grad()
-        critic_losses.backward()
-        self.critic_optimizer.step()
+                self.critic_updates_count += 1
 
-        '''                     actor losses                       '''
-        '''        update based on new policy of old states        '''
-        if self.learn_count % self.POLICY_DELAY == 0:
-            self.critic_one.eval()
-            self.actor.train()
-            retrospective_actions = self.choose_actions(states, noisy=False, target=False)
-            retrospective_values = self.critic_one(states, retrospective_actions)
-            actor_loss = torch.mean(-retrospective_values)
-            
-            self.actor.optimizer.zero_grad()
-            actor_loss.backward()
-            self.actor.optimizer.step()
+                '''                     actor losses                       '''
+                '''        update based on new policy of old states        '''
+                if self.critic_updates_count >= self.VALUE_MATURITY_DELAY:
+                    if self.critic_updates_count % self.POLICY_DELAY == 0:
+                        self.critic_one.eval()
+                        self.critic_two.eval()
+                        self.actor.train()
 
-            self.update_all_target_params()
+                        retrospective_actions = self.choose_actions(states, noisy=False, target=False)
+                        retrospective_values = self.critic_one(states, retrospective_actions)
+                        actor_loss = -torch.mean(retrospective_values)
+                        
+                        self.actor_optimizer.zero_grad()
+                        actor_loss.backward()
+                        self.actor_optimizer.step()
 
+                        self.update_all_target_params()
+                else:
+                    print(("Delaying Policy Update: waiting for value maturity "
+                        f"(remaining value learn steps: {self.VALUE_MATURITY_DELAY - self.learn_count})"))
         self.learn_count += 1
+
 
 if __name__ == '__main__':
     env = ContinuousCartPoleEnv()
@@ -312,7 +332,7 @@ if __name__ == '__main__':
         while not done:
             env.render()
 
-            actions = agent.choose_action(state, noisy=True)
+            actions = agent.choose_action(state, noisy=False)
             state_, reward, done, info = env.step(actions)
             agent.store_memory(state, actions, reward, state_, done)
             agent.learn()
