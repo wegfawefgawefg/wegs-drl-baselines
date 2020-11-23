@@ -120,7 +120,12 @@ class Actor(torch.nn.Module):
             nn.Linear( layer_sizes[1], num_actions))
 
     def forward(self, x):
-        return self.model(x)
+        x = self.model(x)
+        actions = torch.tanh(x)
+        # print(x)
+        # print(actions)
+        return actions
+        # return x   #    tanh or not
 
 class Agent():
     def __init__(self, 
@@ -128,13 +133,13 @@ class Agent():
             state_shape, 
             num_actions, 
             action_range,
-            layer_sizes=(128, 128), 
-            batch_size=64,
+            layer_sizes=(256, 256), 
+            batch_size=8,#64,
             gamma=0.99,
 
             #   replay buffer
             buffer_size=1_000_000,      
-            min_buffer_fullness=1_000,
+            min_buffer_fullness=1_000, #10_000,
 
             #   learn rates
             critic_learn_rate=0.001,    
@@ -142,13 +147,14 @@ class Agent():
             target_lerp_rate=0.995,
 
             #   update frequencies / delays
-            num_babbling_steps=100,#100
+            num_babbling_steps=1_000, #10_000,
             update_every=50,#50,
-            value_maturity_delay=50, #50,
+            value_maturity_delay=100, #1_000,
             policy_delay=2,
 
             #   noise
-            noise_size=0.2,
+            actor_noise=0.1,
+            target_noise=0.2,
             noise_clamp=0.5
             ):
 
@@ -166,7 +172,8 @@ class Agent():
         self.VALUE_MATURITY_DELAY = value_maturity_delay
         self.POLICY_DELAY         = policy_delay
         self.TAU                  = target_lerp_rate
-        self.NOISE_SIZE           = 0.2
+        self.TARGET_NOISE_MAG     = target_noise
+        self.ACTOR_NOISE_MAG      = actor_noise
         self.NOISE_CLAMP          = 0.5
 
         '''   STATE   '''
@@ -190,23 +197,28 @@ class Agent():
             self.target_critic_one.parameters(), 
             self.target_critic_two.parameters())
 
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=actor_learn_rate)
-        self.critic_optimizer = optim.Adam(params=self.critic_params, lr=critic_learn_rate)
+        ''' freeze all target network weights'''
+        for param in self.target_actor.parameters():
+            param.requires_grad = False
+        for param in self.target_critic_params:
+            param.requires_grad = False
+
+        self.actor_optimizer = optim.Adam(  params=self.actor.parameters(), lr=actor_learn_rate)
+        self.critic_optimizer = optim.Adam( params=self.critic_params,      lr=critic_learn_rate)
 
     def store_memory(self, state, actions, reward, state_, done):
         self.memory.store_memory(state, actions, reward, state_, done)
 
     def update_actor_target_params(self):
-        ''' time this operation to find shorter method ''' 
-        with torch.no_grad():
-            for param, target_param in zip(self.actor.parameters(), self.target_actor.parameters()):
-                target_param.data.mul_(self.TAU)
-                target_param.data.add_((1 - self.TAU) * param.data)
-
-        #   codewise i like this one better
+        ''' time this operation to find if "in-place" is shorter method ''' 
         # with torch.no_grad():
         #     for param, target_param in zip(self.actor.parameters(), self.target_actor.parameters()):
-        #         target_param.data.copy_(self.TAU * param.data + (1 - self.TAU) * target_param.data)
+        #         target_param.data.mul_(self.TAU)
+        #         target_param.data.add_((1 - self.TAU) * param.data)
+
+        with torch.no_grad():
+            for param, target_param in zip(self.actor.parameters(), self.target_actor.parameters()):
+                target_param.data.copy_(self.TAU * param.data + (1 - self.TAU) * target_param.data)
 
     def update_critic_target_params(self):
         with torch.no_grad():
@@ -217,16 +229,16 @@ class Agent():
         self.update_critic_target_params()
         self.update_actor_target_params()
 
-    def choose_actions(self, states, noisy=False, target=False):
-        if not target:
-            actions = self.actor(states)
-        else:   #   use target network instead
+    def choose_actions(self, states, noisy=False, noise_mag=0.0, target=False):
+        if target:
             actions = self.target_actor(states)
-
-        actions = torch.tanh(actions)
+        else:
+            actions = self.actor(states)
+        
         actions = self.ACTION_RANGE * actions
+        # print(f"actions: {actions}")
         if noisy:
-            epsilon = torch.randn_like(actions) * self.NOISE_SIZE   #   might should be normal dist instead
+            epsilon = torch.randn_like(actions) * noise_mag
             noise = torch.clamp(epsilon, -self.NOISE_CLAMP, self.NOISE_CLAMP)
             # print(f"action: {actions}, noise: {noise}")
             actions += noise
@@ -234,7 +246,7 @@ class Agent():
 
         return actions
 
-    def choose_action(self, states, noisy=False):
+    def choose_action(self, states, noisy=True):
         ''' this is the non learnable version of choose_actions() 
             for taking single actions in the env                    '''
         if self.babbling_steps <= self.NUM_BABBLING_STEPS:
@@ -248,7 +260,7 @@ class Agent():
                 states = states.to(self.DEVICE)
                 states = states.unsqueeze(0)
 
-                actions = self.choose_actions(states, noisy, target=False)
+                actions = self.choose_actions(states, noisy, noise_mag=self.ACTOR_NOISE_MAG, target=False)
 
                 actions = actions[0]
                 actions = actions.detach().cpu().numpy()
@@ -267,15 +279,13 @@ class Agent():
                 states, actions, rewards, states_, dones = self.memory.sample(self.BATCH_SIZE, self.DEVICE)
                 
                 '''                     critic losses                       '''
-                self.critic_one.train()
-                self.critic_two.train()
                 self.actor.eval()
-
+                self.target_actor.eval()
                 values_one = self.critic_one(states, actions)
                 values_two = self.critic_two(states, actions)
 
                 with torch.no_grad():   #   future values
-                    actions_ = self.choose_actions(states_, noisy=True, target=True)
+                    actions_ = self.choose_actions(states_, noisy=True, noise_mag=self.TARGET_NOISE_MAG, target=True)
 
                     values_one_ = self.target_critic_one(states_, actions_)
                     values_two_ = self.target_critic_two(states_, actions_)
@@ -298,9 +308,10 @@ class Agent():
                 '''        update based on new policy of old states        '''
                 if self.critic_updates_count >= self.VALUE_MATURITY_DELAY:
                     if self.critic_updates_count % self.POLICY_DELAY == 0:
-                        self.critic_one.eval()
-                        self.critic_two.eval()
                         self.actor.train()
+                        self.target_actor.eval()
+                        for param in self.critic_params:
+                            param.requires_grad = False
 
                         retrospective_actions = self.choose_actions(states, noisy=False, target=False)
                         retrospective_values = self.critic_one(states, retrospective_actions)
@@ -309,6 +320,9 @@ class Agent():
                         self.actor_optimizer.zero_grad()
                         actor_loss.backward()
                         self.actor_optimizer.step()
+
+                        for param in self.critic_params:
+                            param.requires_grad = True
 
                         self.update_all_target_params()
                 else:
@@ -332,7 +346,7 @@ if __name__ == '__main__':
         while not done:
             env.render()
 
-            actions = agent.choose_action(state, noisy=False)
+            actions = agent.choose_action(state, noisy=True)
             state_, reward, done, info = env.step(actions)
             agent.store_memory(state, actions, reward, state_, done)
             agent.learn()
