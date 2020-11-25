@@ -124,7 +124,7 @@ class Agent(object):
 
             #   replay buffer
             buffer_size=1_000_000,
-            min_buffer_fullness=64,     #Paper: 10_000,
+            min_buffer_fullness=2_000,     #Paper: 10_000,
 
             #   learn rates
             critic_learn_rate=3e-4,    
@@ -132,8 +132,8 @@ class Agent(object):
             tau=0.005,
 
             #   update frequencies / delays
-            num_babbling_steps=100,     #Paper: 10_000,
-            critic_maturity_delay=100,  #Paper: 10_000,
+            num_babbling_steps=1_000,     #Paper: 10_000,
+            critic_maturity_delay=1_000,  #Paper: 10_000,
             critic_update_freq=1,       #Paper:     50,
             actor_update_freq=2,
 
