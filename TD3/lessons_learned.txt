@@ -1,0 +1,7 @@
+BUGS CONQUERED:
+    MAJOR:
+    1. critic layer was dropping information with the encoding and add.
+        did not work with this.
+    2. replay buffer rewards came out in a different shape, 
+        this caused the targets to be the wrong size
+        mean pooling silently failed this. but this probably effects results substantially.
