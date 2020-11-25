@@ -93,12 +93,12 @@ class Critic(torch.nn.Module):
         self.q1 = nn.Sequential(
             nn.Linear( state_shape[0] + num_actions,    layer_sizes[0]),     nn.ReLU(),
             nn.Linear( layer_sizes[0],                  layer_sizes[1]),     nn.ReLU(),
-            nn.Linear( layer_sizes[1], num_actions))
+            nn.Linear( layer_sizes[1], 1))
 
         self.q2 = nn.Sequential(
             nn.Linear( state_shape[0] + num_actions,    layer_sizes[0]),     nn.ReLU(),
             nn.Linear( layer_sizes[0],                  layer_sizes[1]),     nn.ReLU(),
-            nn.Linear( layer_sizes[1], num_actions))
+            nn.Linear( layer_sizes[1], 1))
 
     def forward(self, states, actions):
         states_actions = torch.cat([states, actions], 1)
@@ -169,8 +169,8 @@ class Agent(object):
         self.num_critic_learn_steps = 0
         self.num_actor_learn_steps = 0
 
-        self.memory_minimum_fullness_announced == False
-        self.critic_maturity_announced == False
+        self.memory_minimum_fullness_announced = False
+        self.critic_maturity_announced = False
 
         self.memory = ReplayBuffer(buffer_size, state_shape, num_actions)
 
@@ -251,7 +251,7 @@ class Agent(object):
             return
         elif not self.memory_minimum_fullness_announced:
             print("Memory reached minimum fullness.")
-            self.memory_minimum_fullness_announced == True
+            self.memory_minimum_fullness_announced = True
 
         self.learn_calls += 1
 
@@ -268,7 +268,7 @@ class Agent(object):
                     return
                 elif not self.critic_maturity_announced:
                     print("Critic values deemed mature.")
-                    self.critic_maturity_announced == True
+                    self.critic_maturity_announced = True
 
                 self.update_actor(data)
                 self.update_target_actor_params()
