@@ -19,8 +19,6 @@ from continuous_cartpole import ContinuousCartPoleEnv
 
     Output Sample:
     >>>
-        total samples: 51021, ep 383: high-score      482.000, score      442.000
-        total samples: 51422, ep 384: high-score      482.000, score      401.000
         total samples: 59721, ep 385: high-score     8299.000, score     8299.000
         total samples: 61101, ep 386: high-score     8299.000, score     1380.000
         total samples: 62775, ep 387: high-score     8299.000, score     1674.000
@@ -28,6 +26,7 @@ from continuous_cartpole import ContinuousCartPoleEnv
         total samples: 63933, ep 389: high-score     8299.000, score      603.000
         total samples: 64352, ep 390: high-score     8299.000, score      419.000
         total samples: 64888, ep 391: high-score     8299.000, score      536.000
+        total samples: 88121, ep 392: high-score    23233.000, score    23233.000
 '''
 
 class ReplayBuffer:
