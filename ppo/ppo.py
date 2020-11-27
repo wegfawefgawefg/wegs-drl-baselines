@@ -11,6 +11,20 @@ from torch.distributions import Normal
 from continuous_cartpole import ContinuousCartPoleEnv
 from multiprocessing_env import SubprocVecEnv
 
+'''
+TODO:
+    -remove weight initing
+    -change done masking to be not 1-done
+        actual zero masking bc more common idiom
+    -make parralelized GAE
+    -real numpy replay buffer
+    -remove the weird ittering
+    -seperate the networks
+        then clean up getting state value, vs policy, vs action
+    -move around where the training code is
+    -add test scoring
+'''
+
 def init_weights(m):
     if isinstance(m, nn.Linear):
         nn.init.normal_(m.weight, mean=0., std=0.1)
@@ -22,10 +36,12 @@ class ActorCritic(nn.Module):
         
         self.critic = nn.Sequential(
             nn.Linear(num_inputs, hidden_size),     nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),     nn.ReLU(),
             nn.Linear(hidden_size, 1))
 
         self.actor = nn.Sequential(
             nn.Linear(num_inputs, hidden_size),     nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),     nn.ReLU(),
             nn.Linear(hidden_size, num_outputs))
 
         self.log_std = nn.Parameter(torch.ones(1, num_outputs) * std)
@@ -47,7 +63,7 @@ class Agent():
         self.num_inputs = num_inputs
         self.num_outputs = num_actions
         self.hidden_size = 256
-        self.learn_rate = 3e-4
+        self.learn_rate = 1e-4
         self.gamma = 0.99
         self.tau = 0.95
 
@@ -130,11 +146,11 @@ def collect_new_trajectories(agent, envs, num_steps):
 
     return states, actions, rewards, next_state, masks, values, log_probs
 
-def test_run(agent, env):
+def test_run(agent, env, high_score):
     state = env.reset()
 
     done = False
-    total_reward = 0
+    score = 0
     while not done:
         env.render()
         state = torch.FloatTensor(state).unsqueeze(0).to(agent.device)
@@ -142,8 +158,13 @@ def test_run(agent, env):
         action = policy_dist.sample().cpu().numpy()[0]
         next_state, reward, done, _ = env.step(action)
         state = next_state
-        total_reward += reward
-    return total_reward
+        score += reward
+
+    print(("high-score {:12.3f}, score {:12.3f}").format(
+        high_score, score, frame))
+    
+    high_score = max(score, high_score)
+    return high_score
 
 # ENV_NAME = "Pendulum-v0"
 ENV_NAME = "LunarLanderContinuous-v2"
@@ -172,9 +193,10 @@ if __name__ == "__main__":
 
     test_env = gym.make(ENV_NAME)
 
+    high_score = -math.inf
     frame  = 0
     while True:
-        test_run(agent, test_env)
+        high_score = test_run(agent, test_env, high_score)
 
         states, actions, rewards, next_state, masks, values, log_probs = collect_new_trajectories(agent, envs, NUM_STEPS_PER_TRAJECTORY)
 
