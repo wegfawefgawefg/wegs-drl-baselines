@@ -57,7 +57,7 @@ You can store rewards and losses in a list and shove them into matplotlib or ten
 - [AC](wegs-drl-baselines/tree/main/ac)
 - [DDPG](wegs-drl-baselines/tree/main/ddpg)
 - [TD3](wegs-drl-baselines/tree/main/TD3)
-- [PPO1](wegs-drl-baselines/tree/main/ppo)
+- [PPO1](/ppo)
 
 ## ExperimentalAlgorithms
 These are complete and functioning, but are not recommended for use in 
