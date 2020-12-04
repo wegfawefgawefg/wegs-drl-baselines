@@ -56,17 +56,20 @@ class ActorCritic(nn.Module):
 
 class Agent():
     def __init__(self, num_inputs, num_actions):
-        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.device = torch.device("cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # self.device = torch.device("cpu")
 
         self.num_inputs = num_inputs
         self.num_outputs = num_actions
-        self.hidden_size = 256
+        self.hidden_size = 1024
         self.learn_rate = 1e-4
         self.gamma = 0.99
         self.tau = 0.95
 
-        self.epochs_per_train = 4
+        self.critic_loss_weight = 0.5
+        self.entropy_weight = 0.001
+
+        self.epochs_per_train = 1
 
         self.model = ActorCritic(self.num_inputs, self.num_outputs, self.hidden_size).to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learn_rate)
@@ -102,9 +105,14 @@ class Agent():
 
                 actor_loss  = - torch.min(surr1, surr2).mean()
                 critic_loss = (return_ - value).pow(2).mean()
-
                 entropy = policy_dist.entropy().mean()
-                loss = 0.5 * critic_loss + actor_loss - 0.001 * entropy
+
+                critic_loss = critic_loss * self.critic_loss_weight
+                entropy = entropy * self.entropy_weight
+
+                loss = self.critic_loss_weight * critic_loss + actor_loss - self.entropy_weight * entropy
+                
+                print(f"actor loss: {actor_loss}, critic loss: {critic_loss}, entropy: {entropy}")
 
                 self.optimizer.zero_grad()
                 loss.backward()
