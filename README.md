@@ -49,18 +49,18 @@ Weg's DRL Baselines does not include model saving or loading, as it goes against
 You can store rewards and losses in a list and shove them into matplotlib or tensorboard.
 
 ## Main Algorithms
-- [DQN](wegs-drl-baselines/dqn)
-- [DoubleDQN](wegs-drl-baselines/double_dqn)
-- [NoisyDQN](wegs-drl-baselines/a2c)
-- [PERDQN](wegs-drl-baselines/a2c)
-- [DuelingAC](wegs-drl-baselines/dueling_ac)
-- [AC](wegs-drl-baselines/ac)
-- [DDPG](wegs-drl-baselines/ddpg)
-- [TD3](wegs-drl-baselines/TD3)
-- [PPO1](wegs-drl-baselines/ppo)
+- [DQN](wegs-drl-baselines/tree/main/dqn)
+- [DoubleDQN](wegs-drl-baselines/tree/main/double_dqn)
+- [NoisyDQN](wegs-drl-baselines/tree/main/a2c)
+- [PERDQN](wegs-drl-baselines/tree/main/a2c)
+- [DuelingAC](wegs-drl-baselinestree/main//dueling_ac)
+- [AC](wegs-drl-baselines/tree/main/ac)
+- [DDPG](wegs-drl-baselines/tree/main/ddpg)
+- [TD3](wegs-drl-baselines/tree/main/TD3)
+- [PPO1](wegs-drl-baselines/tree/main/ppo)
 
 ## ExperimentalAlgorithms
 These are complete and functioning, but are not recommended for use in 
 making good quality RL bots.
-- [BATCH-AC](wegs-drl-baselines/batch_actor_critic)
-- [AE-WorldModel](wegs-drl-baselinles/world_modeling)
+- [BATCH-AC](wegs-drl-baselines/tree/main/batch_actor_critic)
+- [AE-WorldModel](wegs-drl-baselinles/tree/main/world_modeling)
