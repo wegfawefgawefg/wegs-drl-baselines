@@ -1,6 +1,6 @@
 **Status:** Maintenance (expect bug fixes and additional algorithms)
 
-<img src="logo.png" width=25% align="right" /> 
+<img src="logo.png" width=50% align="right" /> 
 
 # RL Baselines
 
@@ -59,7 +59,7 @@ You can store rewards and losses in a list and shove them into matplotlib or ten
 - [TD3](/TD3)
 - [PPO1](/ppo)
 
-## ExperimentalAlgorithms
+## Experimental Algorithms
 These are complete and functioning, but are not recommended for use in 
 making good quality RL bots.
 - [BATCH-AC](/batch_actor_critic)
