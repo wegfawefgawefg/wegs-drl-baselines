@@ -1,7 +1,6 @@
 import math
 import random
 import copy
-import itertools
 
 import gym       
 import numpy as np
@@ -9,15 +8,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-
-'''
-one hot actions encode
-one hot actions decode function
-
-error on icm forward
-
-'''
-
 
 class ReplayBuffer:
     def __init__(self, size, state_shape, num_actions):
