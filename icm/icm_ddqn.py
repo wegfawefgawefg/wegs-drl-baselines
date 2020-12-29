@@ -129,7 +129,8 @@ class Agent():
             buffer_size=1_000_000,
             min_buffer_fullness=64,
 
-            icm_max_reward=1.0
+            icm_max_reward=1.0,
+            no_extrinsic_rewards=True,
             ):
 
         '''     SETTINGS    '''
@@ -140,6 +141,7 @@ class Agent():
         self.num_actions = num_actions
         self.gamma = gamma
         self.icm_max_reward = icm_max_reward
+        self.no_extrinsic_rewards=no_extrinsic_rewards
 
         self.min_buffer_fullness = min_buffer_fullness
 
@@ -220,8 +222,10 @@ class Agent():
         states, actions, rewards, states_, dones = self.memory.sample(self.batch_size, self.device)
         forward_loss, inverse_loss = self.get_icm_loss((states, actions, rewards, states_, dones))
         intrinsic_rewards = torch.clamp(forward_loss, 0, self.icm_max_reward).detach().view(self.batch_size, 1)
-        # print(intrinsic_rewards)
-        rewards += intrinsic_rewards
+        if self.no_extrinsic_rewards:
+            rewards = intrinsic_rewards
+        else:
+            rewards += intrinsic_rewards
         q_network_loss = self.get_q_network_loss((states, actions, rewards, states_, dones))
 
         forward_loss = forward_loss.mean()
