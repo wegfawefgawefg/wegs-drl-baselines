@@ -35,8 +35,8 @@ class Agent():
             state_shape, num_actions, action_shape, 
             batch_size, slice_size):
         self.gamma = 0.99
-        self.tau = 0.05
-        self.has_target_net = False
+        self.tau = 0.01
+        self.has_target_net = True
 
         self.state_shape = state_shape
         self.num_actions = num_actions      #   this is how many actions there are to choose from
@@ -49,8 +49,8 @@ class Agent():
         self.slice_replay_buffer = MemorySliceReplayBuffer(
             size=self.buffer_size, slice_size=self.slice_size, 
             state_shape=self.state_shape, action_shape=self.action_shape)
-        # self.epsilon = LinearSchedule(start=1.0, end=0.01, num_steps=2000)
-        self.epsilon = LinearSchedule(start=1.0, end=0.1, num_steps=30)
+        self.epsilon = LinearSchedule(start=1.0, end=0.01, num_steps=300)
+        # self.epsilon = LinearSchedule(start=1.0, end=0.1, num_steps=30)
 
 
         # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -99,27 +99,28 @@ class Agent():
             qs, hidden_states_ = self.net(states, hidden_states)
             chosen_q = qs[batch_indices, actions.T[0]]
 
-            # if self.has_target_net:
-            #     qs_, hidden_state_3 = self.target_net(state_, hidden_state_)
-            #     action_qs_, hidden_state_3 = self.net(state_, hidden_state_)
-            #     action_ = torch.argmax(action_qs_)
-            #     chosen_q_ = qs_[action_]
-            # else:
-            action_qs_, hidden_state_3 = self.net(states_, hidden_states_)
-            chosen_q_ = torch.max(action_qs_, dim=1)[0]
+            if self.has_target_net:
+                qs_, hidden_state_3 = self.target_net(states_, hidden_states_)
+                action_qs_, hidden_state_3 = self.net(states_, hidden_states_)
+                actions_ = torch.argmax(action_qs_, dim=1)
+                chosen_q_ = qs_[batch_indices, actions_]
+            else:
+                action_qs_, hidden_state_3 = self.net(states_, hidden_states_)
+                chosen_q_ = torch.max(action_qs_, dim=1)[0]
 
             rewards = rewards.T[0]
             q_target = rewards + self.gamma * chosen_q_
 
             loss = torch.mean( (q_target -  chosen_q) ** 2 )
-            batch_losses.append(loss)
+            batch_losses.append(-loss)
 
             hidden_states = hidden_states_
             hidden_states[dones.T[0]] = 0.0 #   if an episode ends mid slice then zero the hidden_states
                                             #   this could be a problem if backprop stops here
 
-        # batch_loss = sum(batch_losses) / len(batch_losses)
-        batch_loss = sum(batch_losses)
+        batch_losses = torch.stack(batch_losses)
+        batch_loss = torch.mean(batch_losses)
+        print(batch_loss)
         self.optimizer.zero_grad()
         batch_loss.backward()
         self.optimizer.step()

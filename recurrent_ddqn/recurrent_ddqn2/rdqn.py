@@ -16,11 +16,11 @@ STATE_SHAPE = (4,)
 NUM_ACTIONS = 2
 ACTION_SHAPE = (1,)
 
-SLICE_SIZE = 2
+SLICE_SIZE = 4
 # NUM_SAMPLES = 8                                    # collected between each learn step
 # NUM_SLICES = math.ceil(NUM_SAMPLES / SLICE_SIZE)    # collected between each learn step
 
-NUM_SLICES = 64
+NUM_SLICES = 32
 BATCH_SIZE = 64
 
 def collect_slices(stats):
@@ -88,7 +88,7 @@ def play_test_episode(stats):
 
 if __name__ == '__main__':
     env = gym.make('CartPole-v1').unwrapped
-    agent = Agent(learn_rate=0.0001, 
+    agent = Agent(learn_rate=0.000001, 
         state_shape=STATE_SHAPE, num_actions=NUM_ACTIONS, action_shape=ACTION_SHAPE,
         batch_size=BATCH_SIZE, slice_size=SLICE_SIZE)
     stats = Stats()
