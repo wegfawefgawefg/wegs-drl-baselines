@@ -42,7 +42,7 @@ class Agent():
         self.num_actions = num_actions      #   this is how many actions there are to choose from
         self.action_shape = action_shape    #   this is how many actions the env accepts at each step
 
-        self.buffer_size = 10_000
+        self.buffer_size = 1_000_000
         self.batch_size = batch_size    # *times slice_size, because recurrency/rollouts
         self.slice_size = slice_size
 
