@@ -120,7 +120,7 @@ class Agent():
 
         batch_losses = torch.stack(batch_losses)
         batch_loss = torch.mean(batch_losses)
-        print(batch_loss)
+        # print(batch_loss)
         self.optimizer.zero_grad()
         batch_loss.backward()
         self.optimizer.step()
