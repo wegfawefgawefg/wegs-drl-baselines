@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 FC1_DIMS = 1024
 FC2_DIMS = 512
-HIDDEN_STATE_SIZE = 64
+HIDDEN_STATE_SIZE = 32
 
 class DQN(torch.nn.Module):
     def __init__(self, state_shape, num_actions):

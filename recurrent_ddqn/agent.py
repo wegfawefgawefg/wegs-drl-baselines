@@ -34,8 +34,9 @@ class Agent():
     def __init__(self, learn_rate, 
             state_shape, num_actions, action_shape, 
             batch_size, slice_size):
-        self.gamma = 0.99
+        self.gamma = 0.999
         self.tau = 0.01
+        self.clip_grad_norm = 0.1
         self.has_target_net = True
 
         self.state_shape = state_shape
@@ -77,7 +78,7 @@ class Agent():
 
             return action, hidden_state_
 
-    def learn(self):
+    def learn(self, stats):
         if self.slice_replay_buffer.count < self.batch_size:
             return 
 
@@ -120,9 +121,10 @@ class Agent():
 
         batch_losses = torch.stack(batch_losses)
         batch_loss = torch.mean(batch_losses)
-        # print(batch_loss)
+        stats.last_loss = batch_loss.item()
         self.optimizer.zero_grad()
         batch_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clip_grad_norm)
         self.optimizer.step()
 
         self.epsilon.step()
