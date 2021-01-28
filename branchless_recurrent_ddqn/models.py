@@ -35,6 +35,12 @@ class DQN(torch.nn.Module):
             nn.Linear(self.fc2_dims, self.num_actions)
         )
 
+    def non_batch_forward(self, state, hidden_state):
+        _, last_hiddens = self.rnn(state, hidden_state)
+        snipped_last_hiddens = last_hiddens.view(self.hidden_state_size)
+        qs = self.net(snipped_last_hiddens)
+        return qs, last_hiddens
+
     def forward(self, state, hidden_state):
         _, last_hiddens = self.rnn(state, hidden_state)
         qs = self.net(last_hiddens)[0]

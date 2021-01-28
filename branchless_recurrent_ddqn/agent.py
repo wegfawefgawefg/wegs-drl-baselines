@@ -36,7 +36,7 @@ class Agent():
             batch_size, slice_size):
         self.gamma = 0.999
         self.tau = 0.05
-        self.clip_grad_norm = 0.1
+        self.clip_grad_norm = 0.025
         self.has_target_net = False
 
         self.state_shape = state_shape
@@ -50,7 +50,7 @@ class Agent():
         self.slice_replay_buffer = MemorySliceReplayBuffer(
             size=self.buffer_size, slice_size=self.slice_size, 
             state_shape=self.state_shape, action_shape=self.action_shape)
-        self.epsilon = LinearSchedule(start=1.0, end=0.01, num_steps=100)
+        self.epsilon = LinearSchedule(start=1.0, end=0.05, num_steps=60)
 
         self.loss = nn.MSELoss()
 
@@ -70,8 +70,8 @@ class Agent():
             state = torch.tensor(observation).float().view(1, 1, -1)
             state = state.detach().to(self.device)
 
-            q_values, hidden_state_ = self.net(state, hidden_state)
-            action = torch.argmax(q_values[0]).item()
+            q_values, hidden_state_ = self.net.non_batch_forward(state, hidden_state)
+            action = torch.argmax(q_values).item()
 
             if random.random() <= self.epsilon.value():
                 action = random.randint(0, self.action_shape[0])
@@ -108,18 +108,12 @@ class Agent():
 
         q_target = last_rewards + self.gamma * chosen_q_
 
-
-        '''this is a serious problem    !!!!!!!!!!!!!
-        hidden_states[dones.T[0]] = 0.0 #   if an episode ends mid slice then zero the hidden_states
-                                        #   this could be a problem if backprop stops here
-        '''
-
         loss = self.loss(q_target, chosen_q)
         # loss = torch.sum((q_target - chosen_q)**2)
 
         self.optimizer.zero_grad()
         loss.backward()
-        # torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clip_grad_norm)
+        torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clip_grad_norm)
         self.optimizer.step()
 
         stats.last_loss = loss.item()

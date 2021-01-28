@@ -1,5 +1,6 @@
 import math
 import random
+from collections import deque
 
 import gym       
 import numpy as np
@@ -20,9 +21,8 @@ SLICE_SIZE = 4
 # NUM_SAMPLES = 8                                    # collected between each learn step
 # NUM_SLICES = math.ceil(NUM_SAMPLES / SLICE_SIZE)    # collected between each learn step
 
-# NUM_SLICES = 32
-NUM_SLICES = 32
-BATCH_SIZE = 64
+NUM_SLICES = 2
+BATCH_SIZE = 3
 
 def collect_slices(stats):
     memory_slices = []
@@ -32,24 +32,18 @@ def collect_slices(stats):
     score = 0
     done = False
 
+    slice_backbuffer = deque(maxlen=SLICE_SIZE)
     with torch.no_grad():
         for slice_num in range(NUM_SLICES):
             memory_slice = MemorySlice(SLICE_SIZE, STATE_SHAPE, ACTION_SHAPE)
-            for sample in range(SLICE_SIZE): 
-                if done:
-                    stats.high_score = max(stats.high_score, score)
-                    stats.scores.append(score)
-                    stats.num_episodes += 1
-                    # stats.print_episode_end()
-
-                    state = env.reset()
-                    hidden_state = agent.net.get_batch_hidden_state(batch_size=1).to(agent.device)
-                    score = 0
-                    done = False
-
+            for i in range(SLICE_SIZE):
                 action, hidden_state_ = agent.choose_action(state, hidden_state)
                 state_, reward, done, info = env.step(action)
+
                 memory_slice.store_transition(state, action, reward, state_, done)
+
+                transition = state, action, reward, state_, done
+                slice_backbuffer.append(transition)
 
                 state = state_
                 hidden_state = hidden_state_
@@ -59,7 +53,27 @@ def collect_slices(stats):
                 stats.num_samples += 1
                 stats.epsilons.append(agent.epsilon.value())
 
-        memory_slices.append(memory_slice)
+                if done:
+                    #   update stats
+                    stats.high_score = max(stats.high_score, score)
+                    stats.scores.append(score)
+                    stats.num_episodes += 1
+                    # stats.print_episode_end()
+
+                    #   build retroactive done-ended slice
+                    memory_slice = MemorySlice(SLICE_SIZE, STATE_SHAPE, ACTION_SHAPE)
+                    for transition in slice_backbuffer:
+                        memory_slice.store_transition(*transition)
+
+                    #   reset for next slice
+                    state = env.reset()
+                    hidden_state = agent.net.get_batch_hidden_state(batch_size=1).to(agent.device)
+                    score = 0
+                    done = False
+
+                    break
+
+            memory_slices.append(memory_slice)
     return memory_slices
 
 def play_test_episode(stats):
@@ -89,7 +103,7 @@ def play_test_episode(stats):
 
 if __name__ == '__main__':
     env = gym.make('CartPole-v1').unwrapped
-    agent = Agent(learn_rate=0.001, 
+    agent = Agent(learn_rate=0.0001, 
         state_shape=STATE_SHAPE, num_actions=NUM_ACTIONS, action_shape=ACTION_SHAPE,
         batch_size=BATCH_SIZE, slice_size=SLICE_SIZE)
     stats = Stats()
