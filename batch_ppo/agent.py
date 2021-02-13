@@ -35,13 +35,11 @@ class Agent():
 
         self.stats = stats
 
-        self.learn_rate     = 1e-4
-        self.num_epochs     = 4
-        self.gamma          = 0.99
-        self.tau            = 0.95
+        self.learn_rate     = 3e-4
+        self.num_epochs     = 8
 
         self.entropy_weight = 0.001
-        self.kl_clip        = 0.2
+        self.kl_clip        = 0.1
 
         self.actor  = Actor(self.state_shape, self.action_shape).to(self.device)
         self.critic = Critic(self.state_shape).to(self.device)

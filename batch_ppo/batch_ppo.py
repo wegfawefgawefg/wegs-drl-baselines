@@ -36,17 +36,13 @@ def make_env():
     return _thunk
 
 if __name__ == "__main__":
-    NUM_ENV_WORKERS = 7
-    BATCH_HEIGHT = 32
-    ROLLOUT_LENGTH = 8
-
     STATE_SHAPE = (4,)
     ACTION_SHAPE = (1,)
     
     stats = Stats()
     agent = Agent(STATE_SHAPE, ACTION_SHAPE, stats)
     rollout_collector = RolloutCollector(
-        num_env_workers=NUM_ENV_WORKERS, make_env_func=make_env, agent=agent, batch_size=BATCH_HEIGHT, rollout_length=ROLLOUT_LENGTH,
+        num_env_workers=8, make_env_func=make_env, agent=agent, batch_size=32, rollout_length=16,
             state_shape=STATE_SHAPE, action_shape=ACTION_SHAPE, stats=stats)
 
     test_env = ContinuousCartPoleEnv()

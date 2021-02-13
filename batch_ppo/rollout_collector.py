@@ -3,11 +3,13 @@ import random
 
 import gym
 import numpy as np
+from tqdm import tqdm
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Normal
+
 from multiprocessing_env import SubprocVecEnv
 
 class RolloutCollector:
@@ -30,8 +32,8 @@ class RolloutCollector:
         self.buffer_full = False
         self.GAE_calculated = False
 
-        self.gamma  = 0.97
-        self.tau    = 0.97
+        self.gamma  = 0.8
+        self.tau    = 0.8
 
         self.rollout_indices = np.zeros(batch_size)
         self.states     = torch.zeros((batch_size, rollout_length+1, *state_shape ),   dtype=torch.float32).to(self.agent.device)
