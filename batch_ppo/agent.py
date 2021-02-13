@@ -41,6 +41,8 @@ class Agent():
         self.entropy_weight = 0.001
         self.kl_clip        = 0.1
 
+        self.deterministic_test_mode = False
+
         self.actor  = Actor(self.state_shape, self.action_shape).to(self.device)
         self.critic = Critic(self.state_shape).to(self.device)
 
@@ -50,8 +52,12 @@ class Agent():
     def act(self, state):
         with torch.no_grad():
             state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
-            policy_dist = self.actor(state)
-            action = policy_dist.sample()
+            if self.deterministic_test_mode:
+                mu = self.actor.forward_deterministic(state)
+                action = mu
+            else:
+                policy_dist = self.actor(state)
+                action = policy_dist.sample()
             action = action.clamp(-1, 1)    #   depends on env
             action = action.cpu().numpy()[0]
             return action

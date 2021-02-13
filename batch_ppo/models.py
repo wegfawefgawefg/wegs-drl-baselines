@@ -19,7 +19,7 @@ class Actor(torch.nn.Module):
         self.data_shape = state_shape
         self.action_shape = action_shape
         
-        self.std = 0.0
+        self.std = 0.01
 
         self.fc1_dims = FC1_DIMS
         self.fc2_dims = FC2_DIMS
@@ -37,6 +37,10 @@ class Actor(torch.nn.Module):
         std   = self.log_std.exp().expand_as(mu)
         policy_dist  = torch.distributions.Normal(mu, std)
         return policy_dist
+    
+    def forward_deterministic(self, x):
+        mu = self.net(x)
+        return mu
 
 class Critic(nn.Module):
     def __init__(self, state_shape):
