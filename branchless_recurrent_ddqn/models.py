@@ -10,10 +10,10 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 
-FC1_DIMS = 1024
-FC2_DIMS = 512
+FC1_DIMS = 256
+FC2_DIMS = 128
 
-HIDDEN_STATE_SIZE = 512
+HIDDEN_STATE_SIZE = 8
 
 class DQN(torch.nn.Module):
     def __init__(self, state_shape, num_actions):
@@ -42,7 +42,10 @@ class DQN(torch.nn.Module):
         return qs, last_hiddens
 
     def forward(self, state, hidden_state):
-        _, last_hiddens = self.rnn(state, hidden_state)
+        all_hiddens, last_hiddens = self.rnn(state, hidden_state)
+
+        print(all_hiddens.shape)
+        print(all_hiddens)
         qs = self.net(last_hiddens)[0]
         return qs, last_hiddens
 
