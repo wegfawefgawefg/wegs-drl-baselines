@@ -35,7 +35,7 @@ class Agent():
         self.stats = stats
 
         self.learn_rate     = 3e-4
-        self.num_epochs     = 16
+        self.num_epochs     = 8
 
         self.entropy_weight = 0.001
         self.kl_clip        = 0.1
