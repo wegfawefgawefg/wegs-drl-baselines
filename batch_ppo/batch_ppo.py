@@ -21,7 +21,7 @@ def play_test_episode(agent, env, stats):
         done = False
         while not done:
             env.render()
-            action = agent.act(state)
+            action = agent.act(state, deterministic=True)
             state_, reward, done, info = env.step(action)
             state = state_
             score += reward

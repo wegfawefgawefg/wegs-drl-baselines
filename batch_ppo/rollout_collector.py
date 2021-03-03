@@ -12,7 +12,7 @@ from torch.distributions import Normal
 
 from multiprocessing_env import SubprocVecEnv
 
-def tensor_print(x):
+def dbg_tensor_print(x):
     print(f"shape: {x.shape}, dtype: {x.dtype}, device: {x.device}")
 
 class RolloutCollector:
@@ -70,12 +70,7 @@ class RolloutCollector:
                     action = policy_dist.sample()
                     action = action.clamp(-1, 1)    #   depends on env
                     cpu_actions = action.cpu().numpy()
-                    try:
-                        state_, reward, done, info = self.envs.step(cpu_actions)
-                    except:
-                        # print(action)
-                        # print(cpu_actions)
-                        quit()
+                    state_, reward, done, info = self.envs.step(cpu_actions)
 
                     value = self.agent.critic(state)
                     log_prob = policy_dist.log_prob(action)

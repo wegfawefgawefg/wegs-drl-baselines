@@ -19,7 +19,6 @@ TODO:
 
 -add entropy maximization as exploration
 -try letting network output the deviation
--add deterministic mode
 -add network load and save
 -add graphing
 -add lstm (might want that to be alternate version)
@@ -36,12 +35,10 @@ class Agent():
         self.stats = stats
 
         self.learn_rate     = 3e-4
-        self.num_epochs     = 8
+        self.num_epochs     = 16
 
         self.entropy_weight = 0.001
         self.kl_clip        = 0.1
-
-        self.deterministic_test_mode = False
 
         self.actor  = Actor(self.state_shape, self.action_shape).to(self.device)
         self.critic = Critic(self.state_shape).to(self.device)
@@ -49,10 +46,10 @@ class Agent():
         self.optimizer = torch.optim.Adam(
             list(self.actor.parameters()) + list(self.critic.parameters()), lr=self.learn_rate)
 
-    def act(self, state):
+    def act(self, state, deterministic=False):
         with torch.no_grad():
             state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
-            if self.deterministic_test_mode:
+            if deterministic:
                 mu = self.actor.forward_deterministic(state)
                 action = mu
             else:
