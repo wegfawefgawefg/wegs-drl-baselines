@@ -54,8 +54,8 @@ class Network(torch.nn.Module):
 
         self.optimizer = optim.Adam(self.parameters(), lr=learn_rate)
         self.loss = nn.MSELoss()
-        # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.device = torch.device("cpu")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        # self.device = torch.device("cpu")
         self.to(self.device)
 
     def forward(self, x):

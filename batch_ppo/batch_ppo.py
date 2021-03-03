@@ -42,7 +42,7 @@ if __name__ == "__main__":
     stats = Stats()
     agent = Agent(STATE_SHAPE, ACTION_SHAPE, stats)
     rollout_collector = RolloutCollector(
-        num_env_workers=2, make_env_func=make_env, agent=agent, batch_size=2, rollout_length=4,
+        num_env_workers=8, make_env_func=make_env, agent=agent, batch_size=32, rollout_length=16,
             state_shape=STATE_SHAPE, action_shape=ACTION_SHAPE, stats=stats)
 
     test_env = ContinuousCartPoleEnv()

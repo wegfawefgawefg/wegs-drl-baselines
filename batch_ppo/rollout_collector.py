@@ -12,6 +12,9 @@ from torch.distributions import Normal
 
 from multiprocessing_env import SubprocVecEnv
 
+def tensor_print(x):
+    print(f"shape: {x.shape}, dtype: {x.dtype}, device: {x.device}")
+
 class RolloutCollector:
     def __init__(self, num_env_workers, make_env_func, agent, batch_size, rollout_length,
             state_shape, action_shape, stats):
@@ -20,6 +23,8 @@ class RolloutCollector:
             -you could run a bunch of collectors simultaniously, 
                 |-  and then use weight mixing on the agents seperately
         '''
+        #self.storage_device = torch.device("cpu")
+
         self.num_env_workers = num_env_workers
         self.envs = SubprocVecEnv([make_env_func() for i in range(num_env_workers)])
         self.agent = agent
@@ -56,33 +61,31 @@ class RolloutCollector:
             for collection_run in range(num_runs_to_full):
                 start_index = collection_run * self.num_env_workers
                 end_index_exclusive = min(start_index + self.num_env_workers, self.batch_size)
-                run_indices = np.arange(start_index, end_index_exclusive)
+                run_indices = torch.arange(start_index, end_index_exclusive, dtype=torch.long)
                 worker_indices = run_indices % self.num_env_workers
 
                 for rollout_idx in range(self.rollout_length+1):
-                    state = torch.FloatTensor(self.state).to(self.agent.device)
+                    state = torch.Tensor(self.state).float().to(self.agent.device)
                     policy_dist = self.agent.actor(state)
                     action = policy_dist.sample()
                     action = action.clamp(-1, 1)    #   depends on env
                     cpu_actions = action.cpu().numpy()
-                    print(action)
-                    print(cpu_actions)
                     try:
                         state_, reward, done, info = self.envs.step(cpu_actions)
                     except:
-                        print(action)
-                        print(cpu_actions)
+                        # print(action)
+                        # print(cpu_actions)
                         quit()
 
                     value = self.agent.critic(state)
                     log_prob = policy_dist.log_prob(action)
 
-                    self.states[run_indices, rollout_idx]       = torch.FloatTensor( state[worker_indices]       )
-                    self.actions[run_indices, rollout_idx]      = torch.FloatTensor( action[worker_indices]      ) 
-                    self.log_probs[run_indices, rollout_idx]    = torch.FloatTensor( log_prob[worker_indices]    ) 
-                    self.values[run_indices, rollout_idx]       = torch.FloatTensor( value[worker_indices]       )
-                    self.rewards[run_indices, rollout_idx]      = torch.FloatTensor( reward[worker_indices]      ).unsqueeze(1)
-                    self.done_masks[run_indices, rollout_idx]   = torch.FloatTensor( 1.0 - done[worker_indices]  ).unsqueeze(1)
+                    self.states[run_indices, rollout_idx]       = state[worker_indices]
+                    self.actions[run_indices, rollout_idx]      = action[worker_indices]
+                    self.log_probs[run_indices, rollout_idx]    = log_prob[worker_indices]
+                    self.values[run_indices, rollout_idx]       = value[worker_indices]
+                    self.rewards[run_indices, rollout_idx]      = torch.Tensor( reward[worker_indices]      ).float().unsqueeze(1).to(self.agent.device)
+                    self.done_masks[run_indices, rollout_idx]   = torch.Tensor( 1.0 - done[worker_indices]  ).float().unsqueeze(1).to(self.agent.device)
                     
                     self.state = state_
 
