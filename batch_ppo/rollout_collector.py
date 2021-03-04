@@ -64,7 +64,15 @@ class RolloutCollector:
                     policy_dist = self.agent.actor(state)
                     action = policy_dist.sample()
                     action = action.clamp(-1, 1)    #   depends on env
-                    state_, reward, done, info = self.envs.step(action.cpu().numpy())
+                    cpu_actions = action.cpu().numpy()
+                    print(action)
+                    print(cpu_actions)
+                    try:
+                        state_, reward, done, info = self.envs.step(cpu_actions)
+                    except:
+                        print(action)
+                        print(cpu_actions)
+                        quit()
 
                     value = self.agent.critic(state)
                     log_prob = policy_dist.log_prob(action)
@@ -90,8 +98,8 @@ class RolloutCollector:
         for i in reversed(range(self.rollout_length)):
             delta = self.rewards[:, i] + self.gamma * self.values[:, i+1] * self.done_masks[:, i] - self.values[:, i]
             gae = delta + self.gamma * self.tau * self.done_masks[:, i] * gae
-            self.returns[:, self.rollout_length - i] = gae + self.values[:, i]
-            self.advantages[:, self.rollout_length - i] = gae
+            self.returns[:, i]    = gae + self.values[:, i]
+            self.advantages[:, i] = gae
 
         self.GAE_calculated = True
 

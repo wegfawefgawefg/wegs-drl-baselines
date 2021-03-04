@@ -27,8 +27,8 @@ TODO:
 
 class Agent():
     def __init__(self, state_shape, action_shape, stats):
-        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.device = torch.device("cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        #self.device = torch.device("cpu")
 
         self.state_shape = state_shape
         self.action_shape = action_shape

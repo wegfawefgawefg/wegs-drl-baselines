@@ -9,8 +9,8 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Normal
 
-FC1_DIMS = 256
-FC2_DIMS = 128
+FC1_DIMS = 1024
+FC2_DIMS = 512
 
 class Actor(torch.nn.Module):
     def __init__(self, state_shape, action_shape):
