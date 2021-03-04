@@ -75,12 +75,15 @@ class RolloutCollector:
                     value = self.agent.critic(state)
                     log_prob = policy_dist.log_prob(action)
 
-                    self.states[run_indices, rollout_idx]       = state[worker_indices]
-                    self.actions[run_indices, rollout_idx]      = action[worker_indices]
-                    self.log_probs[run_indices, rollout_idx]    = log_prob[worker_indices]
-                    self.values[run_indices, rollout_idx]       = value[worker_indices]
-                    self.rewards[run_indices, rollout_idx]      = torch.Tensor( reward[worker_indices]      ).float().unsqueeze(1).to(self.agent.device)
-                    self.done_masks[run_indices, rollout_idx]   = torch.Tensor( 1.0 - done[worker_indices]  ).float().unsqueeze(1).to(self.agent.device)
+                    reward     = torch.Tensor(reward).float().unsqueeze(1).to(self.agent.device)
+                    done_masks = torch.Tensor(1.0 - done).float().unsqueeze(1).to(self.agent.device)
+
+                    self.states[run_indices, rollout_idx]     = state[worker_indices]
+                    self.actions[run_indices, rollout_idx]    = action[worker_indices]
+                    self.log_probs[run_indices, rollout_idx]  = log_prob[worker_indices]
+                    self.values[run_indices, rollout_idx]     = value[worker_indices]
+                    self.rewards[run_indices, rollout_idx]    = reward[worker_indices]
+                    self.done_masks[run_indices, rollout_idx] = done_masks[worker_indices]
                     
                     self.state = state_
 
