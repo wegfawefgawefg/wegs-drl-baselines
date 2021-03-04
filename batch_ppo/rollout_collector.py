@@ -68,7 +68,10 @@ class RolloutCollector:
                     state = torch.Tensor(self.state).float().to(self.agent.device)
                     policy_dist = self.agent.actor(state)
                     action = policy_dist.sample()
-                    action = action.clamp(-1, 1)    #   depends on env
+                    if self.agent.tanh_action_clamping:
+                        action = torch.tanh(action)
+                    else:
+                        action = action.clamp(-1, 1)    #   depends on env
                     cpu_actions = action.cpu().numpy()
                     state_, reward, done, info = self.envs.step(cpu_actions)
 

@@ -40,6 +40,8 @@ class Agent():
         self.entropy_weight = 0.001
         self.kl_clip        = 0.1
 
+        self.tanh_action_clamping = False
+
         self.actor  = Actor(self.state_shape, self.action_shape).to(self.device)
         self.critic = Critic(self.state_shape).to(self.device)
 
@@ -55,7 +57,10 @@ class Agent():
             else:
                 policy_dist = self.actor(state)
                 action = policy_dist.sample()
-            action = action.clamp(-1, 1)    #   depends on env
+            if self.tanh_action_clamping:
+                action = torch.tanh(action)
+            else:
+                action = action.clamp(-1, 1)    #   depends on env
             action = action.cpu().numpy()[0]
             return action
 
