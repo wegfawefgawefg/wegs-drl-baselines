@@ -14,7 +14,7 @@ Itertools and less common tensor operations, numpy, and pytorch features are avo
 
 These algorithms function as a starting point for your own implementations. 
 While not distributed implementations, they could be used in production with minimal modification. These implementations include the most commonly used 
-drl algorithms, and if hyperparameter tuned, achieve state of the art results in non-reward-sparse continuous control environments.
+drl algorithms, and if hyperparameter tuned, can achieve state of the art results in non-reward-sparse continuous control environments.
 
 
 ## Prerequisites 
